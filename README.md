@@ -73,5 +73,8 @@ OPENGATE_CONFIG=path/to/config.json npm run dev
 - **Audit-ready**: immutable request logs
 - **Open source**: MIT license
 
+## JWT Note
+The MVP is planned to support JWT verification using a shared secret so the first implementation stays simple and easy to validate. For production-oriented usage, the project direction is to move toward asymmetric JWT verification so verification keys can be distributed without sharing signing power.
+
 ## License
 MIT
