@@ -1,0 +1,36 @@
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8080
+  },
+  "upstream": {
+    "url": "http://localhost:5050"
+  },
+  "auth": {
+    "header": "x-api-key",
+    "keys": [
+      {
+        "key": "demo-key",
+        "name": "demo-partner",
+        "scopes": ["payments:read", "payments:write"]
+      }
+    ]
+  },
+  "rate_limit": {
+    "points": 60,
+    "duration": 60
+  },
+  "routes": [
+    {
+      "path_prefix": "/v1/payments",
+      "required_scopes": ["payments:read"]
+    }
+  ],
+  "audit": {
+    "enabled": true,
+    "db_path": "./data/opengate.db"
+  },
+  "policies": {
+    "allowed_ips": []
+  }
+}

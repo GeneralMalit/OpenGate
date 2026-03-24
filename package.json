@@ -1,0 +1,25 @@
+{
+  "name": "opengate",
+  "version": "0.1.0",
+  "description": "Open-source zero-trust API gateway for drop-in protection and auditing.",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "demo:upstream": "node examples/mock-upstream.js"
+  },
+  "dependencies": {
+    "@fastify/http-proxy": "^9.6.0",
+    "better-sqlite3": "^11.5.0",
+    "fastify": "^4.26.2",
+    "rate-limiter-flexible": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.5"
+  }
+}
