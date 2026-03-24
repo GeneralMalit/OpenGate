@@ -4,3 +4,10 @@ dist/
 .data/
 data/
 *.log
+
+# Agent instruction/notes files
+AGENT.md
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+COPILOT.md
