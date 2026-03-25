@@ -127,6 +127,21 @@ Execution and logging:
 
 Definition: the gate is the final checklist that prevents execution before the spec is stable.
 
+### Step 7 - Define the product roadmap
+After the MVP is stable, write a roadmap that explains how the project gets from "working" to "excellent". Focus on the upgrades that materially improve adoption, trust, scale, and maintainability. Treat the roadmap as a product spec for future work, not as a loose wish list.
+
+The roadmap lives in [spec/roadmap.md](roadmap.md).
+
+Roadmap content:
+- Security hardening and key management.
+- Developer experience and installability.
+- Multi-framework support and adapter strategy.
+- Storage backends for rate limiting and audit logs.
+- Observability, monitoring, and operational controls.
+- Admin workflows, policy management, and enterprise readiness.
+
+Definition: the roadmap is the long-term product plan that shows how the MVP becomes a durable, 10/10 product.
+
 ## Notes
 - Keep spec dialogue and plan iterations in markdown so the reasoning survives.
 - Link project-specific notes back to this workflow when you evolve the process.
@@ -134,4 +149,3 @@ Definition: the gate is the final checklist that prevents execution before the s
 ## Update Log
 - 2026-03-24: Expanded the six-step workflow with explicit definitions, stronger intent capture, and a more prescriptive spec-driven loop.
 - 2026-03-24: Restructured steps under H2/H3 headers and detailed Step 1 framing content.
-
