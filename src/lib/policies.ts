@@ -1,27 +1,43 @@
-import type { Config } from "./config.js";
+import type { OpenGateConfig, RegisterProtectedRouteConfig, ResolvedRoutePolicy } from "./types.js";
 
-export function requiredScopesForPath(config: Config, pathName: string): string[] {
-  let matched: Config["routes"][number] | undefined;
+export function resolveRoutePolicy(
+  config: OpenGateConfig,
+  routePath: string,
+  overrides?: Pick<RegisterProtectedRouteConfig, "policyId" | "accessMode" | "requiredScopes" | "enabled">
+): ResolvedRoutePolicy {
+  const fromConfig = overrides?.policyId
+    ? config.routePolicies.find((item) => item.id === overrides.policyId)
+    : findLongestPrefixPolicy(config, routePath);
 
-  for (const route of config.routes ?? []) {
-    if (pathName.startsWith(route.path_prefix)) {
-      if (!matched || route.path_prefix.length > matched.path_prefix.length) {
-        matched = route;
-      }
+  if (!fromConfig && !overrides?.accessMode) {
+    throw new Error(`No route policy matched path "${routePath}" and no explicit access mode override was provided.`);
+  }
+
+  return {
+    id: overrides?.policyId ?? fromConfig?.id ?? `implicit:${routePath}`,
+    pathPrefix: fromConfig?.pathPrefix ?? routePath,
+    accessMode: overrides?.accessMode ?? fromConfig?.accessMode ?? "public",
+    requiredScopes: overrides?.requiredScopes ?? fromConfig?.requiredScopes ?? [],
+    enabled: overrides?.enabled ?? fromConfig?.enabled ?? true
+  };
+}
+
+function findLongestPrefixPolicy(config: OpenGateConfig, pathName: string) {
+  let match = config.routePolicies.find((item) => pathName.startsWith(item.pathPrefix));
+
+  for (const policy of config.routePolicies) {
+    if (!policy.enabled) {
+      continue;
+    }
+
+    if (!pathName.startsWith(policy.pathPrefix)) {
+      continue;
+    }
+
+    if (!match || policy.pathPrefix.length > match.pathPrefix.length) {
+      match = policy;
     }
   }
 
-  return matched?.required_scopes ?? [];
-}
-
-export function ipAllowed(config: Config, ip: string | undefined): boolean {
-  if (!config.policies?.allowed_ips?.length) {
-    return true;
-  }
-
-  if (!ip) {
-    return false;
-  }
-
-  return config.policies.allowed_ips.includes(ip);
+  return match;
 }

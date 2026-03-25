@@ -83,7 +83,7 @@ OpenGate is a library-first security gateway for existing website or backend API
 77. The example website free-tier and upgraded-tier responses must keep the same base JSON shape.
 78. The example website upgraded response must add one extra field indicating paid-tier access.
 79. The example website must demonstrate the full OpenGate story end to end: free-tier access, upgraded JWT access, rate limiting, and audit logging.
-80. The example website may show the caller’s last successful access time using browser-local state; this behavior is outside OpenGate core requirements.
+80. The example website may show the caller's last successful access time using browser-local state; this behavior is outside OpenGate core requirements.
 
 ## Non-Functional Requirements
 - The MVP should be installable and configurable by a developer in about one hour for a simple existing endpoint.
@@ -128,3 +128,4 @@ OpenGate is a library-first security gateway for existing website or backend API
 
 ## Open Questions
 - No blocking open questions are currently identified at the Step 4 spec level.
+

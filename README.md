@@ -1,80 +1,126 @@
 # OpenGate
 
-OpenGate is an open-source, zero-trust API gateway designed to be a **drop-in security and policy layer** for any HTTP API. You place OpenGate in front of an existing service, and it becomes the single entry point for all consumers. Every request is authenticated, policy-checked, rate-limited, and audited before it ever touches the upstream API.
+OpenGate is a library-first security gate for existing HTTP API endpoints. You install it inside your backend, point it at the route you want to protect, and it handles caller identification, tiering, rate limiting, and audit logging before your handler runs.
 
-## Overview
+## Tech Stack
 
-**What it is**
-- A lightweight gateway that sits between **API providers** and **API consumers**
-- A security and governance layer that requires **no changes** to upstream services
-- A practical alternative to heavy API management platforms for small teams and startups
+<table>
+  <tr>
+    <td><img src="https://img.shields.io/badge/Fastify-4.26.2-111111?style=for-the-badge&logo=fastify&logoColor=white" alt="Fastify 4.26.2" /></td>
+    <td><img src="https://img.shields.io/badge/TypeScript-5.4.5-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript 5.4.5" /></td>
+    <td><img src="https://img.shields.io/badge/Zod-3.24.1-3E67B1?style=for-the-badge" alt="Zod 3.24.1" /></td>
+    <td><img src="https://img.shields.io/badge/JOSE-5.9.6-444444?style=for-the-badge" alt="JOSE 5.9.6" /></td>
+  </tr>
+  <tr>
+    <td><img src="https://img.shields.io/badge/Better--SQLite3-11.5.0-4D4D4D?style=for-the-badge" alt="Better-SQLite3 11.5.0" /></td>
+    <td><img src="https://img.shields.io/badge/Vitest-2.1.8-6E9F18?style=for-the-badge" alt="Vitest 2.1.8" /></td>
+    <td><img src="https://img.shields.io/badge/%40fastify%2Fcookie-9.4.0-7A7A7A?style=for-the-badge" alt="@fastify/cookie 9.4.0" /></td>
+    <td><img src="https://img.shields.io/badge/%40fastify%2Fformbody-7.4.0-7A7A7A?style=for-the-badge" alt="@fastify/formbody 7.4.0" /></td>
+  </tr>
+</table>
 
-**What it solves**
-- Prevents abuse and accidental overload through rate limiting
-- Enforces per-route authorization using scopes
-- Provides a clear audit trail of who called what, when, and how often
-- Makes external API exposure safer without rewriting existing services
+## Screenshots
 
-**How it works (request flow)**
-1) Client sends a request to OpenGate  
-2) OpenGate validates the API key from a configurable header  
-3) It checks IP policy rules (optional)  
-4) It applies rate limits per key  
-5) It enforces scope requirements based on the route path  
-6) It proxies the request to the upstream API  
-7) It logs the request and outcome in the audit store  
+Anonymous request state:
 
-**Who it is for**
-- Teams that want to expose or partner-enable APIs safely
-- Builders who need a minimal integration point for security controls
-- Developers who want an open, auditable gateway without vendor lock-in
+![OpenGate anonymous example](docs/screenshots/example-anonymous.png)
 
-## Quick start
+Upgraded request state after login and `/api` access:
 
-1) Install dependencies
+![OpenGate upgraded example](docs/screenshots/example-upgraded.png)
+
+## How It Works
+
+OpenGate sits between the request and the handler that eventually serves it. The host app still owns the route and the business logic, but OpenGate becomes the layer that decides whether the request should reach that logic at all.
+
+Before installation, the endpoint is exposed directly:
+
+```mermaid
+flowchart LR
+  client[Client] --> app[Host App]
+  app --> handler[Route Handler]
 ```
+
+After installation, OpenGate sits in front of the handler:
+
+```mermaid
+flowchart LR
+  client[Client] --> gate[OpenGate]
+  gate --> handler[Protected Handler]
+```
+
+The request flow is deliberately small and predictable:
+
+```mermaid
+flowchart TD
+  req[Incoming Request] --> policy[Resolve Route Policy]
+  policy --> access{Access Mode}
+  access -->|public| identify[Resolve Identity Context]
+  access -->|authenticated| auth[Check JWT or API Key]
+  access -->|jwt| jwt[Validate JWT]
+  access -->|api_key| key[Validate API Key]
+  jwt --> identify
+  key --> identify
+  auth --> identify
+  identify --> rate[Apply Rate Limit]
+  rate --> audit[Write Audit Event]
+  audit --> ok{Allowed?}
+  ok -->|yes| handler[Run Protected Handler]
+  ok -->|no| deny[Return Rejection]
+```
+
+Configuration stays local and explicit. The config file is the source of truth, and each section controls one part of the gate:
+
+```mermaid
+flowchart LR
+  cfg[opengate.config.json]
+  cfg --> orgs[Organizations]
+  cfg --> jwt[JWT Issuers]
+  cfg --> keys[API Keys]
+  cfg --> id[Identity Context]
+  cfg --> routes[Route Policies]
+  cfg --> limits[Rate Limits]
+  cfg --> audit[Audit Settings]
+  cfg --> behavior[Behavior Overrides]
+```
+
+The MVP is Fastify-first, which keeps the integration surface small and practical. The handler you already have is still the handler you keep; OpenGate simply becomes the layer in front of it, with the config file controlling how much of the gate is strict, permissive, or customized.
+
+## Installation
+
+The detailed installation guide lives in [docs/INSTALLATION.md](docs/INSTALLATION.md).
+
+If you are integrating OpenGate into your own endpoint, that guide walks through the config shape, JWT and API-key setup, route registration, and audit storage.
+
+## Example App
+
+The repository includes a separate example app in [examples/website](examples/website). It shows the full flow in a compact form: a fake username/password login, JWT stored in an `HttpOnly` cookie, a single `GET /api` endpoint, and the same base response shape for free-tier and upgraded-tier access. Rate limiting and audit logging run behind the scenes.
+
+Run it locally with:
+
+```bash
 npm install
-```
-
-2) Run the mock upstream
-```
-npm run demo:upstream
-```
-
-3) Start OpenGate
-```
+npm run test
 npm run dev
 ```
 
-4) Call the gateway
-```
-curl -H "x-api-key: demo-key" http://localhost:8080/v1/payments
-```
+Then open [http://127.0.0.1:3000](http://127.0.0.1:3000).
 
-## Configuration
+## Notes
 
-OpenGate loads `opengate.config.json` by default. Override with:
-```
-OPENGATE_CONFIG=path/to/config.json npm run dev
-```
+The MVP uses shared-secret JWT verification. That is the right tradeoff for the first implementation and for tightly controlled setups, but it is not the long-term production shape. For production, move JWT verification to an asymmetric model so OpenGate verifies with a public key instead of sharing the signing secret.
 
-### Key settings
-- `upstream.url`: target API to protect
-- `auth.header`: header used for API keys
-- `auth.keys`: allowed keys and scopes
-- `rate_limit`: requests per duration
-- `routes`: path-based scope rules
-- `audit.db_path`: SQLite file for audit logs
-- `policies.allowed_ips`: optional IP allow list
+The current MVP is intentionally narrow: Fastify-first integration, in-memory rate limiting by default, SQLite audit logging, and no distributed rate-limit backend yet.
 
-## Design goals
-- **Drop-in**: no upstream code changes
-- **Zero trust**: every request is authenticated and policy-checked
-- **Audit-ready**: immutable request logs
-- **Open source**: MIT license
+## Versioning
 
-## JWT Note
-The MVP is planned to support JWT verification using a shared secret so the first implementation stays simple and easy to validate. For production-oriented usage, the project direction is to move toward asymmetric JWT verification so verification keys can be distributed without sharing signing power.
+OpenGate follows semantic versioning. Release versions are generated from conventional commits through `semantic-release`, and the release workflow runs on pushes to `main`.
+
+In practice:
+- `fix:` becomes a patch release
+- `feat:` becomes a minor release
+- breaking changes become a major release
 
 ## License
+
 MIT

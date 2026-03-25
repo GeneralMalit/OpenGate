@@ -52,7 +52,7 @@ The spec is now clear enough to plan execution. This plan maps implementation wo
   - Maps to spec: `51`, `53`, `56`, `57`, `62`, `68`, `69`, `75`, `76`
 - [ ] Return the same JSON shape for free-tier and upgraded-tier responses, with one extra paid-tier field for upgraded users.
   - Maps to spec: `70`, `71`, `76`, `77`, `78`
-- [ ] Implement optional browser-local “last successful access” display in the example app only.
+- [ ] Implement optional browser-local "last successful access" display in the example app only.
   - Maps to spec: `73`, `80`
 - [ ] Add logout to return the user to free-tier behavior.
   - Maps to spec: `73`
@@ -91,5 +91,6 @@ The spec is now clear enough to plan execution. This plan maps implementation wo
 
 ## Exit Criteria For Step 5
 - The user agrees the phases and ordering make sense.
-- The user agrees the “three things” section is capturing the right hidden risks.
+- The user agrees the "three things" section is capturing the right hidden risks.
 - The plan is specific enough that Step 6 can request tests first and then execute in phases.
+

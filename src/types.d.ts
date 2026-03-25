@@ -1,9 +1,8 @@
 import "fastify";
+import type { OpenGateRequestContext } from "./lib/types.js";
 
 declare module "fastify" {
   interface FastifyRequest {
-    opengateStart: bigint | null;
-    opengateKey: string | null;
-    opengateClient: string | null;
+    opengate: OpenGateRequestContext | null;
   }
 }

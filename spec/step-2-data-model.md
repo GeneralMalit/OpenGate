@@ -263,7 +263,7 @@ Integrity rules:
 - Upgraded `/api` responses should visibly indicate paid-tier access.
 - The upgraded response should keep the same shape as the free-tier response with one extra paid-tier field.
 - Demo login should use username and password input and store the JWT in a cookie.
-- Caller-specific “last successful access” display is an example-app behavior and should be handled in browser-local storage rather than OpenGate core state.
+- Caller-specific "last successful access" display is an example-app behavior and should be handled in browser-local storage rather than OpenGate core state.
 
 ## Later Model
 These are likely useful, but should stay out of the MVP unless Step 3 requires them.
@@ -286,3 +286,4 @@ The example implementation should stay clearly separated from the OpenGate produ
 
 ## Open Questions
 None at the Step 2 data-model level right now.
+
