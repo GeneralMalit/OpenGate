@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "rootDir": "src",
+    "outDir": "dist",
+    "paths": {
+      "opengate": [
+        "../../dist/src/index.d.ts"
+      ],
+      "opengate/express": [
+        "../../dist/src/express.d.ts"
+      ]
+    }
+  },
+  "include": [
+    "src"
+  ]
+}

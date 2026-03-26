@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenGate 0.1.0 Reference</title>
+    <link rel="stylesheet" href="../../styles.css" />
+  </head>
+  <body>
+    <div class="site">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark">OG</div>
+          <div>
+            <div class="brand-title">Package Reference</div>
+            <div class="version-pill">OpenGate 0.1.0</div>
+          </div>
+        </div>
+        <a class="version-pill" href="./index.html">Back to overview</a>
+      </header>
+
+      <div class="layout">
+        <aside class="sidebar">
+          <h2>Sections</h2>
+          <nav>
+            <a href="./install.html">Install guide</a>
+            <a href="./reference.html">Package reference</a>
+            <a href="./upgrade.html">Upgrade notes</a>
+          </nav>
+        </aside>
+
+        <main class="content">
+          <section class="section">
+            <h2>Published packages</h2>
+            <ul>
+              <li><code>opengate</code> - compatibility-first root package and CLI.</li>
+              <li><code>@opengate/fastify</code> - explicit Fastify adapter package.</li>
+              <li><code>@opengate/express</code> - explicit Express adapter package.</li>
+            </ul>
+          </section>
+
+          <section class="section">
+            <h2>Exports</h2>
+            <pre><code>import { createOpenGate } from "opengate";
+import { createFastifyOpenGate } from "opengate/fastify";
+import { createExpressOpenGate } from "opengate/express";</code></pre>
+          </section>
+
+          <section class="section">
+            <h2>Starter templates</h2>
+            <ul>
+              <li><code>website</code> - browser login and hidden API route.</li>
+              <li><code>api</code> - JWT-protected JSON API.</li>
+              <li><code>partner</code> - API-key-first server-to-server starter.</li>
+            </ul>
+          </section>
+        </main>
+      </div>
+    </div>
+  </body>
+</html>

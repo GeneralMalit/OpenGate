@@ -1,189 +1,159 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { createAuditLogger } from "./audit.js";
-import { authorizeRequest } from "./auth.js";
-import { loadConfig } from "./config.js";
+import type { FastifyInstance, FastifyReply, FastifyRequest, HTTPMethods } from "fastify";
+import { createGateEngine, type OpenGateEngine } from "./engine.js";
+import { resolveOperationalPaths } from "./observability.js";
+import { normalizeCookies, normalizeHeaders, parseCookieHeader, resolveRequestId, type RequestEnvelope } from "./request.js";
 import { resolveRoutePolicy } from "./policies.js";
-import { consumeRateLimit, createRateLimitStore } from "./rate_limit.js";
 import type {
-  AuditEvent,
   CreateOpenGateOptions,
+  FastifyOpenGate,
+  FastifyOperationalRoutesConfig,
+  FastifyRegisterProtectedRouteConfig,
   OpenGate,
-  OpenGateConfig,
-  OpenGateRequestContext,
-  RegisterProtectedRouteConfig,
-  RequestIdentity
+  OpenGateConfig
 } from "./types.js";
 
 const APP_HOOK_MARK = Symbol.for("opengate.audit.hook");
+const APP_OPS_HOOK_MARK = Symbol.for("opengate.observability.hook");
+const ENGINE_MARK = Symbol.for("opengate.engine");
 
 export function createOpenGate(configOrSource?: OpenGateConfig | string | CreateOpenGateOptions): OpenGate {
-  const normalized = normalizeCreateOptions(configOrSource);
-  const config = loadConfig(normalized.configPath ?? normalized.config);
-  const rateLimitStore = createRateLimitStore(config, normalized.rateLimitStore);
-  const auditLogger = createAuditLogger(config);
+  const engine = createGateEngine(configOrSource);
 
   return {
-    config,
+    config: engine.config,
     registerProtectedRoute(app, routeConfig) {
-      registerProtectedRoute(app, {
-        ...routeConfig,
-        gate: this
-      });
+      registerProtectedRouteWithEngine(engine, app, routeConfig);
+    },
+    registerOperationalRoutes(app, routeConfig) {
+      registerOperationalRoutesWithEngine(engine, app, routeConfig);
     },
     close() {
-      auditLogger?.close();
-    }
-  };
-
-  function evaluateRateLimit(identity: RequestIdentity) {
-    const result = consumeRateLimit(rateLimitStore, config, identity);
-    if (!result.allowed) {
-      return {
-        allowed: false as const,
-        statusCode: 429,
-        message: "rate limited",
-        blockReason: "rate_limited"
-      };
-    }
-
-    return { allowed: true as const };
-  }
-
-  function logAuditEvent(request: FastifyRequest, reply: FastifyReply) {
-    const context = request.opengate;
-    if (!context || context.auditLogged || !auditLogger) {
-      return;
-    }
-
-    context.auditLogged = true;
-    const event = buildAuditEvent(context, request, reply);
-    auditLogger.log(event);
-  }
-
-  function buildAuditEvent(
-    context: OpenGateRequestContext,
-    request: FastifyRequest,
-    reply: FastifyReply
-  ): AuditEvent {
-    return {
-      occurredAt: new Date().toISOString(),
-      routePolicyId: context.routePolicy.id,
-      identityType: context.identity.identityType,
-      organizationId: "organizationId" in context.identity ? context.identity.organizationId : null,
-      secondaryIdentifier:
-        "secondaryIdentifier" in context.identity ? context.identity.secondaryIdentifier : null,
-      method: request.method,
-      path: request.url,
-      statusCode: reply.statusCode,
-      latencyMs: Number(process.hrtime.bigint() - context.startedAt) / 1_000_000,
-      outcome: context.outcome,
-      blockReason: context.blockReason,
-      jwtClaimSnapshot: context.jwtClaimSnapshot
-    };
-  }
-
-  function ensureAppHooks(app: FastifyInstance) {
-    const store = app as FastifyInstance & { [APP_HOOK_MARK]?: boolean };
-    if (store[APP_HOOK_MARK]) {
-      return;
-    }
-
-    if (!app.hasRequestDecorator("opengate")) {
-      app.decorateRequest("opengate", null);
-    }
-
-    app.addHook("onResponse", (request, reply, done) => {
-      logAuditEvent(request, reply);
-      done();
-    });
-
-    store[APP_HOOK_MARK] = true;
-  }
-
-  function registerProtectedRouteInternal(app: FastifyInstance, routeConfig: RegisterProtectedRouteConfig) {
-    ensureAppHooks(app);
-    const routePolicy = resolveRoutePolicy(config, routeConfig.path, routeConfig);
-
-    app.route({
-      method: routeConfig.method,
-      url: routeConfig.path,
-      handler: async (request, reply) => {
-        const startedAt = process.hrtime.bigint();
-        const authDecision = await authorizeRequest(config, routePolicy, request);
-
-        if (!authDecision.allowed) {
-          request.opengate = {
-            startedAt,
-            routePolicy,
-            identity: authDecision.identity,
-            outcome: "blocked",
-            blockReason: authDecision.blockReason,
-            jwtClaimSnapshot: authDecision.jwtClaimSnapshot,
-            auditLogged: false
-          };
-          reply.code(authDecision.statusCode).send({ error: authDecision.message });
-          return;
-        }
-
-        const rateLimitDecision = evaluateRateLimit(authDecision.identity);
-        if (!rateLimitDecision.allowed) {
-          request.opengate = {
-            startedAt,
-            routePolicy,
-            identity: authDecision.identity,
-            outcome: "blocked",
-            blockReason: rateLimitDecision.blockReason,
-            jwtClaimSnapshot: authDecision.jwtClaimSnapshot,
-            auditLogged: false
-          };
-          reply.code(rateLimitDecision.statusCode).send({ error: rateLimitDecision.message });
-          return;
-        }
-
-        request.opengate = {
-          startedAt,
-          routePolicy,
-          identity: authDecision.identity,
-          outcome: "allowed",
-          blockReason: null,
-          jwtClaimSnapshot: authDecision.jwtClaimSnapshot,
-          auditLogged: false
-        };
-
-        return routeConfig.handler(request, reply);
-      }
-    });
-  }
-
-  function registerProtectedRoute(app: FastifyInstance, routeConfig: RegisterProtectedRouteConfig) {
-    registerProtectedRouteInternal(app, routeConfig);
-  }
+      return engine.close();
+    },
+    [ENGINE_MARK]: engine
+  } as OpenGate & { [ENGINE_MARK]: OpenGateEngine };
 }
 
-export function registerProtectedRoute(app: FastifyInstance, routeConfig: RegisterProtectedRouteConfig) {
-  routeConfig.gate.registerProtectedRoute(app, {
-    path: routeConfig.path,
-    method: routeConfig.method,
-    handler: routeConfig.handler,
-    policyId: routeConfig.policyId,
-    accessMode: routeConfig.accessMode,
-    requiredScopes: routeConfig.requiredScopes,
-    enabled: routeConfig.enabled
+export function registerProtectedRoute(app: FastifyInstance, routeConfig: FastifyRegisterProtectedRouteConfig) {
+  const engine = (routeConfig.gate as FastifyOpenGate & { [ENGINE_MARK]?: OpenGateEngine })[ENGINE_MARK];
+  if (!engine) {
+    throw new Error("OpenGate instance is missing its internal runtime.");
+  }
+
+  registerProtectedRouteWithEngine(engine, app, routeConfig);
+}
+
+function registerProtectedRouteWithEngine(
+  engine: OpenGateEngine,
+  app: FastifyInstance,
+  routeConfig: Omit<FastifyRegisterProtectedRouteConfig, "gate">
+) {
+  ensureAppHooks(app, engine);
+  const routePolicy = resolveRoutePolicy(engine.config, routeConfig.path, routeConfig);
+
+  app.route({
+    method: routeConfig.method as HTTPMethods,
+    url: routeConfig.path,
+    handler: async (request, reply) => {
+      const startedAt = process.hrtime.bigint();
+      const requestEnvelope = toRequestEnvelope(request, engine.getRequestIdHeader());
+      const evaluation = await engine.evaluateRequest(requestEnvelope, routePolicy, startedAt);
+
+      request.opengate = evaluation.context;
+
+      if (!evaluation.allowed) {
+        reply.code(evaluation.statusCode).send({ error: evaluation.message });
+        return;
+      }
+
+      return routeConfig.handler(request, reply);
+    }
   });
 }
 
-function normalizeCreateOptions(input?: OpenGateConfig | string | CreateOpenGateOptions): CreateOpenGateOptions {
-  if (!input) {
-    return {};
+function ensureAppHooks(app: FastifyInstance, engine: OpenGateEngine) {
+  const store = app as FastifyInstance & { [APP_HOOK_MARK]?: boolean };
+  if (store[APP_HOOK_MARK]) {
+    return;
   }
 
-  if (typeof input === "string") {
-    return { configPath: input };
+  if (!app.hasRequestDecorator("opengate")) {
+    app.decorateRequest("opengate", null);
   }
 
-  if ("routePolicies" in input) {
-    return { config: input };
+  app.addHook("onResponse", (request, reply, done) => {
+    if (request.opengate) {
+      engine.recordAuditEvent(request.opengate, { method: request.method, path: request.url, url: request.url }, reply.statusCode);
+    }
+
+    done();
+  });
+
+  store[APP_HOOK_MARK] = true;
+}
+
+function ensureObservabilityHooks(app: FastifyInstance, engine: OpenGateEngine, paths = resolveOperationalPaths(engine.config)) {
+  const store = app as FastifyInstance & { [APP_OPS_HOOK_MARK]?: boolean };
+  if (store[APP_OPS_HOOK_MARK]) {
+    return;
   }
 
-  return input;
+  app.route({
+    method: "GET",
+    url: paths.healthPath,
+    handler: async () => {
+      engine.recordHealthCheck(paths.healthPath);
+      return { ok: true };
+    }
+  });
+
+  app.route({
+    method: "GET",
+    url: paths.readyPath,
+    handler: async () => {
+      engine.recordHealthCheck(paths.readyPath);
+      return { ready: true };
+    }
+  });
+
+  app.route({
+    method: "GET",
+    url: paths.metricsPath,
+    handler: async () => engine.getMetricsSnapshot()
+  });
+
+  app.route({
+    method: "GET",
+    url: paths.statusPath,
+    handler: async () => engine.getStatusSnapshot()
+  });
+
+  store[APP_OPS_HOOK_MARK] = true;
+}
+
+function registerOperationalRoutesWithEngine(
+  engine: OpenGateEngine,
+  app: FastifyInstance,
+  routeConfig?: Omit<FastifyOperationalRoutesConfig, "gate">
+) {
+  ensureObservabilityHooks(app, engine, routeConfig ? { ...resolveOperationalPaths(engine.config), ...routeConfig } : undefined);
+}
+
+function toRequestEnvelope(request: FastifyRequest, requestIdHeader: string): RequestEnvelope {
+  const parsedCookies = parseCookieHeader(request.headers.cookie as string | undefined);
+  const headers = normalizeHeaders(request.headers);
+  const cookies = normalizeCookies({
+    ...(parsedCookies ?? {}),
+    ...(request.cookies ?? {})
+  });
+
+  return {
+    method: request.method,
+    url: request.url,
+    path: request.url,
+    ip: request.ip,
+    requestId: resolveRequestId(headers, requestIdHeader, request.id),
+    headers,
+    cookies
+  };
 }

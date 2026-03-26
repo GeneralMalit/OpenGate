@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenGate Docs</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="site">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark">OG</div>
+          <div>
+            <div class="brand-title">OpenGate Docs</div>
+            <div class="version-pill">Current version: 0.1.0</div>
+          </div>
+        </div>
+        <div class="version-pill">Versioned docs, package-aware releases, starter templates</div>
+      </header>
+
+      <div class="layout">
+        <aside class="sidebar">
+          <h2>Versions</h2>
+          <nav>
+            <a href="./versions/0.1.0/index.html">0.1.0 overview</a>
+            <a href="./versions/0.1.0/install.html">Install guide</a>
+            <a href="./versions/0.1.0/reference.html">Package reference</a>
+            <a href="./versions/0.1.0/upgrade.html">Upgrade notes</a>
+          </nav>
+        </aside>
+
+        <main class="content">
+          <section class="hero">
+            <h1>Adopt OpenGate without guessing.</h1>
+            <p>
+              This docs site follows the published package versions. The root package stays compatible,
+              the adapter packages are explicit, and the starter templates show the intended install paths.
+            </p>
+            <p>
+              Start with the install guide, then move to the template that matches your app: website, API,
+              or partner/server-to-server.
+            </p>
+          </section>
+
+          <section class="section">
+            <h2>Install matrix</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Need</th>
+                  <th>Install path</th>
+                  <th>Starter</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Fastify app</td>
+                  <td><code>opengate</code> + <code>@opengate/fastify</code></td>
+                  <td>Website or API starter</td>
+                </tr>
+                <tr>
+                  <td>Express app</td>
+                  <td><code>opengate</code> + <code>@opengate/express</code></td>
+                  <td>Express example or adapter quickstart</td>
+                </tr>
+                <tr>
+                  <td>Partner API</td>
+                  <td><code>opengate</code> + <code>@opengate/fastify</code></td>
+                  <td>Partner starter</td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+
+          <section class="section">
+            <h2>Starter templates</h2>
+            <div class="grid cards">
+              <article class="card">
+                <h3>Website</h3>
+                <p>Browser login, HttpOnly JWT cookie, free-tier to paid-tier upgrade, and a hidden `/api` route.</p>
+              </article>
+              <article class="card">
+                <h3>API</h3>
+                <p>A lean JWT-protected JSON API for existing services that want a small integration surface.</p>
+              </article>
+              <article class="card">
+                <h3>Partner</h3>
+                <p>Server-to-server API-key flow with explicit client credentials and a narrow starter shape.</p>
+              </article>
+            </div>
+          </section>
+
+          <section class="section">
+            <h2>What changed in Phase 7</h2>
+            <ul>
+              <li>Workspace packaging for compatibility-first distribution.</li>
+              <li>Explicit adapter packages for Fastify and Express.</li>
+              <li>Versioned docs and Changesets-based release flow.</li>
+              <li>Starter templates that match the common adoption paths.</li>
+            </ul>
+          </section>
+
+          <div class="footer">
+            OpenGate docs are versioned with the repo. The versioned pages below are the source of truth.
+          </div>
+        </main>
+      </div>
+    </div>
+  </body>
+</html>

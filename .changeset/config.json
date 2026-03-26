@@ -1,0 +1,10 @@
+{
+  "$schema": "https://unpkg.com/@changesets/config@3.0.3/schema.json",
+  "changelog": ["@changesets/changelog-github", { "repo": "GeneralMalit/OpenGate" }],
+  "commit": false,
+  "access": "public",
+  "baseBranch": "main",
+  "fixed": [["opengate", "@opengate/fastify", "@opengate/express"]],
+  "updateInternalDependencies": "patch",
+  "ignore": []
+}

@@ -5,11 +5,11 @@ import formbody from "@fastify/formbody";
 import Fastify from "fastify";
 import { SignJWT } from "jose";
 import { createOpenGate } from "../../src/index.js";
+import { renderAdminPage } from "../shared/admin-page.js";
 import type { OpenGateConfig } from "../../src/lib/types.js";
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const DEFAULT_CONFIG_PATH = path.join(__dirname, "opengate.config.json");
+const DEFAULT_CONFIG_PATH = path.join(process.cwd(), "examples", "website", "opengate.config.json");
 
 const demoUsers = [
   {
@@ -33,6 +33,9 @@ export async function buildExampleApp(configPathOrConfig: string | OpenGateConfi
   const gate = createOpenGate(configPathOrConfig);
   const cookieName = gate.config.jwt.cookieName ?? "opengate_demo_jwt";
   const issuerConfig = gate.config.jwt.issuers[0];
+  if (!issuerConfig || issuerConfig.verificationMode === "jwks") {
+    throw new Error("The example website requires a shared-secret demo JWT issuer.");
+  }
   const appVersion = process.env.npm_package_version ?? "v0.1.0";
 
   await app.register(cookie);
@@ -83,6 +86,15 @@ export async function buildExampleApp(configPathOrConfig: string | OpenGateConfi
   });
 
   gate.registerProtectedRoute(app, {
+    path: "/admin",
+    method: "GET",
+    accessMode: "authenticated",
+    handler: async (_request, reply) => {
+      reply.type("text/html").send(renderAdminPage({ appVersion }));
+    }
+  });
+
+  gate.registerProtectedRoute(app, {
     path: "/api",
     method: "GET",
     handler: async (request) => {
@@ -96,9 +108,10 @@ export async function buildExampleApp(configPathOrConfig: string | OpenGateConfi
     }
   });
 
-  app.addHook("onClose", (_instance, done) => {
-    gate.close();
-    done();
+  gate.registerOperationalRoutes(app);
+
+  app.addHook("onClose", async () => {
+    await gate.close();
   });
 
   return app;
@@ -198,7 +211,8 @@ function renderHomePage(hasSession: boolean, cookieName: string, appVersion: str
           hasSession
             ? `<form method="post" action="/logout">
           <button type="submit">Logout</button>
-        </form>`
+        </form>
+        <p class="muted"><a href="/admin">Open admin</a> to inspect users, keys, and policies.</p>`
             : `<form method="post" action="/login">
           <input name="username" placeholder="username" />
           <input name="password" type="password" placeholder="password" />

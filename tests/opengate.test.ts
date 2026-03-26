@@ -3,7 +3,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createOpenGate, hashApiKey, loadConfig, validateConfig } from "../src/index.js";
 import { consumeRateLimit, createRateLimitStore, getCalendarDayBucket } from "../src/lib/rate_limit.js";
-import { createTestApp, createTestConfig, readAuditRows, signTestJwt } from "./helpers.js";
+import { createJwksTestServer, createTestApp, createTestConfig, readAuditRows, signTestJwt } from "./helpers.js";
 
 const appsToClose: Array<() => Promise<void>> = [];
 
@@ -72,7 +72,7 @@ describe("config and library surface", () => {
     const config = createTestConfig({
       rateLimits: {
         timezone: "UTC",
-        store: "custom-store",
+        store: "memory",
         free: { points: 10, duration: "calendar_day" },
         upgraded: { points: 1000, duration: "calendar_day" }
       }
@@ -92,8 +92,77 @@ describe("config and library surface", () => {
       rateLimitStore: customStore
     });
 
-    expect(gate.config.rateLimits.store).toBe("custom-store");
+    expect(gate.config.rateLimits.store).toBe("memory");
     gate.close();
+  });
+
+  it("normalizes legacy shared-secret issuers and keyHash API clients into Phase 1 structures", () => {
+    const config = validateConfig({
+      organizations: [{ id: "org-1", name: "Org 1", enabled: true }],
+      jwt: {
+        issuers: [
+          {
+            issuer: "legacy-issuer",
+            audiences: ["legacy-audience"],
+            sharedSecret: "legacy-secret"
+          }
+        ]
+      },
+      apiKeys: {
+        headerName: "x-api-key",
+        clients: [
+          {
+            id: "legacy-client",
+            name: "Legacy Client",
+            organizationId: "org-1",
+            userId: "user-1",
+            keyHash: hashApiKey("legacy-raw-key")
+          }
+        ]
+      },
+      identityContext: { source: "jwt_claim", claim: "unique_user_id" },
+      routePolicies: [
+        { id: "public", pathPrefix: "/api", accessMode: "public" }
+      ],
+      rateLimits: {
+        free: { points: 10, duration: "calendar_day" },
+        upgraded: { points: 1000, duration: "calendar_day" }
+      },
+      audit: { enabled: true, sqlitePath: ":memory:" }
+    });
+
+    expect(config.jwt.issuers[0]?.verificationMode).toBe("shared_secret");
+    expect(config.apiKeys.clients[0]?.keyVersions).toHaveLength(1);
+    expect(config.apiKeys.clients[0]?.keyVersions?.[0]?.id).toBe("legacy-client-legacy-key");
+  });
+
+  it("rejects unsupported audit claim snapshots", () => {
+    expect(() => validateConfig({
+      organizations: [{ id: "org-1", name: "Org 1", enabled: true }],
+      jwt: {
+        issuers: [
+          {
+            issuer: "issuer",
+            audiences: ["audience"],
+            sharedSecret: "secret"
+          }
+        ]
+      },
+      apiKeys: { headerName: "x-api-key", clients: [] },
+      identityContext: { source: "jwt_claim", claim: "unique_user_id" },
+      routePolicies: [
+        { id: "public", pathPrefix: "/api", accessMode: "public" }
+      ],
+      rateLimits: {
+        free: { points: 10, duration: "calendar_day" },
+        upgraded: { points: 1000, duration: "calendar_day" }
+      },
+      audit: {
+        enabled: true,
+        sqlitePath: ":memory:",
+        jwtClaimSnapshot: ["iss", "email"]
+      }
+    })).toThrow('Unsupported claim "email"');
   });
 });
 
@@ -383,6 +452,242 @@ describe("route protection and identity resolution", () => {
 
     expect(response.statusCode).toBe(200);
   });
+
+  it("accepts a valid JWKS token on a jwt route", async () => {
+    const jwks = await createJwksTestServer();
+    appsToClose.push(() => jwks.close());
+    const signingKey = await jwks.createSigningKey("kid-1");
+    jwks.publishKeys([signingKey]);
+
+    const { app } = await createTestApp({
+      jwt: {
+        cookieName: "opengate_test_jwt",
+        issuers: [
+          {
+            issuer: jwks.issuer,
+            audiences: [jwks.audience],
+            verificationMode: "jwks",
+            jwksUrl: jwks.jwksUrl,
+            allowedAlgorithms: ["RS256"],
+            cacheTtlMs: 1_000,
+            requestTimeoutMs: 1_000,
+            organizationClaim: "org_id",
+            subjectClaim: "sub",
+            requiredClaims: ["iss", "aud", "exp", "sub", "unique_user_id"],
+            optionalClaims: ["scope"]
+          }
+        ]
+      }
+    });
+    appsToClose.push(() => app.close());
+
+    const token = await jwks.signJwt(signingKey);
+    const response = await app.inject({
+      method: "GET",
+      url: "/jwt",
+      headers: { authorization: `Bearer ${token}` }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      ok: true,
+      identityType: "jwt"
+    });
+  });
+
+  it("rejects JWKS tokens with missing kid, bad alg, wrong audience, wrong issuer, and disabled issuers", async () => {
+    const jwks = await createJwksTestServer();
+    appsToClose.push(() => jwks.close());
+    const signingKey = await jwks.createSigningKey("kid-1");
+    jwks.publishKeys([signingKey]);
+
+    const baseIssuer = {
+      issuer: jwks.issuer,
+      audiences: [jwks.audience],
+      verificationMode: "jwks" as const,
+      jwksUrl: jwks.jwksUrl,
+      allowedAlgorithms: ["RS256"],
+      cacheTtlMs: 1_000,
+      requestTimeoutMs: 1_000,
+      organizationClaim: "org_id",
+      subjectClaim: "sub",
+      requiredClaims: ["iss", "aud", "exp", "sub", "unique_user_id"],
+      optionalClaims: ["scope"]
+    };
+
+    const { app: missingKidApp } = await createTestApp({
+      jwt: { cookieName: "opengate_test_jwt", issuers: [baseIssuer] }
+    });
+    appsToClose.push(() => missingKidApp.close());
+
+    const missingKidToken = await jwks.signJwt(signingKey, {}, { includeKid: false });
+    const missingKidResponse = await missingKidApp.inject({
+      method: "GET",
+      url: "/jwt",
+      headers: { authorization: `Bearer ${missingKidToken}` }
+    });
+    expect(missingKidResponse.statusCode).toBe(401);
+
+    const { app: badAlgApp } = await createTestApp({
+      jwt: {
+        cookieName: "opengate_test_jwt",
+        issuers: [
+          {
+            ...baseIssuer,
+            allowedAlgorithms: ["PS256"]
+          }
+        ]
+      }
+    });
+    appsToClose.push(() => badAlgApp.close());
+
+    const badAlgToken = await jwks.signJwt(signingKey);
+    const badAlgResponse = await badAlgApp.inject({
+      method: "GET",
+      url: "/jwt",
+      headers: { authorization: `Bearer ${badAlgToken}` }
+    });
+    expect(badAlgResponse.statusCode).toBe(401);
+
+    const { app: wrongAudienceApp } = await createTestApp({
+      jwt: { cookieName: "opengate_test_jwt", issuers: [baseIssuer] }
+    });
+    appsToClose.push(() => wrongAudienceApp.close());
+
+    const wrongAudienceToken = await jwks.signJwt(signingKey, { aud: "other-audience" });
+    const wrongAudienceResponse = await wrongAudienceApp.inject({
+      method: "GET",
+      url: "/jwt",
+      headers: { authorization: `Bearer ${wrongAudienceToken}` }
+    });
+    expect(wrongAudienceResponse.statusCode).toBe(401);
+
+    const wrongIssuerToken = await jwks.signJwt(signingKey, { iss: "https://different-issuer.test" });
+    const wrongIssuerResponse = await wrongAudienceApp.inject({
+      method: "GET",
+      url: "/jwt",
+      headers: { authorization: `Bearer ${wrongIssuerToken}` }
+    });
+    expect(wrongIssuerResponse.statusCode).toBe(401);
+
+    const { app: disabledIssuerApp } = await createTestApp({
+      jwt: {
+        cookieName: "opengate_test_jwt",
+        issuers: [
+          {
+            ...baseIssuer,
+            enabled: false
+          }
+        ]
+      }
+    });
+    appsToClose.push(() => disabledIssuerApp.close());
+
+    const disabledIssuerToken = await jwks.signJwt(signingKey);
+    const disabledIssuerResponse = await disabledIssuerApp.inject({
+      method: "GET",
+      url: "/jwt",
+      headers: { authorization: `Bearer ${disabledIssuerToken}` }
+    });
+    expect(disabledIssuerResponse.statusCode).toBe(403);
+    expect(disabledIssuerResponse.json()).toEqual({ error: "forbidden" });
+  });
+
+  it("refreshes JWKS on unknown kid and accepts a rotated key", async () => {
+    const jwks = await createJwksTestServer();
+    appsToClose.push(() => jwks.close());
+    const key1 = await jwks.createSigningKey("kid-1");
+    const key2 = await jwks.createSigningKey("kid-2");
+    jwks.publishKeys([key1]);
+
+    const { app } = await createTestApp({
+      jwt: {
+        cookieName: "opengate_test_jwt",
+        issuers: [
+          {
+            issuer: jwks.issuer,
+            audiences: [jwks.audience],
+            verificationMode: "jwks",
+            jwksUrl: jwks.jwksUrl,
+            allowedAlgorithms: ["RS256"],
+            cacheTtlMs: 60_000,
+            requestTimeoutMs: 1_000,
+            organizationClaim: "org_id",
+            subjectClaim: "sub",
+            requiredClaims: ["iss", "aud", "exp", "sub", "unique_user_id"],
+            optionalClaims: ["scope"]
+          }
+        ]
+      }
+    });
+    appsToClose.push(() => app.close());
+
+    const token1 = await jwks.signJwt(key1);
+    const firstResponse = await app.inject({
+      method: "GET",
+      url: "/jwt",
+      headers: { authorization: `Bearer ${token1}` }
+    });
+    expect(firstResponse.statusCode).toBe(200);
+
+    jwks.publishKeys([key1, key2]);
+    const token2 = await jwks.signJwt(key2);
+    const secondResponse = await app.inject({
+      method: "GET",
+      url: "/jwt",
+      headers: { authorization: `Bearer ${token2}` }
+    });
+    expect(secondResponse.statusCode).toBe(200);
+  });
+
+  it("stops accepting a removed JWKS key after cache refresh", async () => {
+    const jwks = await createJwksTestServer();
+    appsToClose.push(() => jwks.close());
+    const key1 = await jwks.createSigningKey("kid-1");
+    const key2 = await jwks.createSigningKey("kid-2");
+    jwks.publishKeys([key1, key2]);
+
+    const { app } = await createTestApp({
+      jwt: {
+        cookieName: "opengate_test_jwt",
+        issuers: [
+          {
+            issuer: jwks.issuer,
+            audiences: [jwks.audience],
+            verificationMode: "jwks",
+            jwksUrl: jwks.jwksUrl,
+            allowedAlgorithms: ["RS256"],
+            cacheTtlMs: 5,
+            requestTimeoutMs: 1_000,
+            organizationClaim: "org_id",
+            subjectClaim: "sub",
+            requiredClaims: ["iss", "aud", "exp", "sub", "unique_user_id"],
+            optionalClaims: ["scope"]
+          }
+        ]
+      }
+    });
+    appsToClose.push(() => app.close());
+
+    const token = await jwks.signJwt(key1);
+    const firstResponse = await app.inject({
+      method: "GET",
+      url: "/jwt",
+      headers: { authorization: `Bearer ${token}` }
+    });
+    expect(firstResponse.statusCode).toBe(200);
+
+    jwks.publishKeys([key2]);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const secondResponse = await app.inject({
+      method: "GET",
+      url: "/jwt",
+      headers: { authorization: `Bearer ${token}` }
+    });
+    expect(secondResponse.statusCode).toBe(401);
+    expect(secondResponse.json()).toEqual({ error: "unauthorized" });
+  });
 });
 
 describe("rate limiting", () => {
@@ -460,6 +765,115 @@ describe("rate limiting", () => {
     expect(second.statusCode).toBe(200);
   });
 
+  it("accepts multiple active API-key versions during a rotation overlap", async () => {
+    const { app } = await createTestApp({
+      apiKeys: {
+        headerName: "x-api-key",
+        clients: [
+          {
+            id: "client-rotation",
+            name: "Rotating Client",
+            organizationId: "org-active",
+            userId: "user-rotation",
+            keyVersions: [
+              {
+                id: "key-v1",
+                keyHash: hashApiKey("rotating-key-v1"),
+                createdAt: "2026-03-01T00:00:00.000Z",
+                enabled: true
+              },
+              {
+                id: "key-v2",
+                keyHash: hashApiKey("rotating-key-v2"),
+                createdAt: "2026-03-15T00:00:00.000Z",
+                enabled: true
+              }
+            ],
+            scopes: ["time:read"],
+            enabled: true
+          }
+        ]
+      }
+    });
+    appsToClose.push(() => app.close());
+
+    const v1 = await app.inject({
+      method: "GET",
+      url: "/api-key",
+      headers: { "x-api-key": "rotating-key-v1" }
+    });
+    const v2 = await app.inject({
+      method: "GET",
+      url: "/api-key",
+      headers: { "x-api-key": "rotating-key-v2" }
+    });
+
+    expect(v1.statusCode).toBe(200);
+    expect(v2.statusCode).toBe(200);
+  });
+
+  it("rejects revoked, expired, disabled, and not-yet-valid API-key versions", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-25T00:00:00.000Z"));
+
+    const { app } = await createTestApp({
+      apiKeys: {
+        headerName: "x-api-key",
+        clients: [
+          {
+            id: "client-rotation",
+            name: "Rotating Client",
+            organizationId: "org-active",
+            userId: "user-rotation",
+            keyVersions: [
+              {
+                id: "revoked-key",
+                keyHash: hashApiKey("revoked-key"),
+                createdAt: "2026-03-01T00:00:00.000Z",
+                revokedAt: "2026-03-20T00:00:00.000Z",
+                enabled: true
+              },
+              {
+                id: "expired-key",
+                keyHash: hashApiKey("expired-key"),
+                createdAt: "2026-03-01T00:00:00.000Z",
+                expiresAt: "2026-03-20T00:00:00.000Z",
+                enabled: true
+              },
+              {
+                id: "disabled-key",
+                keyHash: hashApiKey("disabled-key"),
+                createdAt: "2026-03-01T00:00:00.000Z",
+                enabled: false
+              },
+              {
+                id: "future-key",
+                keyHash: hashApiKey("future-key"),
+                createdAt: "2026-03-01T00:00:00.000Z",
+                notBefore: "2026-04-01T00:00:00.000Z",
+                enabled: true
+              }
+            ],
+            scopes: ["time:read"],
+            enabled: true
+          }
+        ]
+      }
+    });
+    appsToClose.push(() => app.close());
+
+    for (const rawKey of ["revoked-key", "expired-key", "disabled-key", "future-key"]) {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api-key",
+        headers: { "x-api-key": rawKey }
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(response.json()).toEqual({ error: "unauthorized" });
+    }
+  });
+
   it("computes calendar-day buckets using timezone and UTC default", () => {
     const date = new Date("2026-03-25T23:30:00.000Z");
 
@@ -467,7 +881,7 @@ describe("rate limiting", () => {
     expect(getCalendarDayBucket(date, "Asia/Manila")).toBe("2026-03-26");
   });
 
-  it("supports organization-scoped uniqueness when configured", () => {
+  it("supports organization-scoped uniqueness when configured", async () => {
     const store = createRateLimitStore(createTestConfig());
     const config = createTestConfig({
       identityContext: {
@@ -484,7 +898,7 @@ describe("rate limiting", () => {
       }
     });
 
-    const first = consumeRateLimit(store, config, {
+    const first = await consumeRateLimit(store, config, {
       identityType: "jwt",
       tier: "upgraded",
       organizationId: "org-a",
@@ -495,7 +909,7 @@ describe("rate limiting", () => {
       jwtClaims: {},
       issuer: "issuer"
     });
-    const second = consumeRateLimit(store, config, {
+    const second = await consumeRateLimit(store, config, {
       identityType: "jwt",
       tier: "upgraded",
       organizationId: "org-b",
@@ -511,7 +925,7 @@ describe("rate limiting", () => {
     expect(second.allowed).toBe(true);
   });
 
-  it("rejects unsupported duration values at runtime", () => {
+  it("rejects unsupported duration values at runtime", async () => {
     const store = createRateLimitStore(createTestConfig());
     const invalidConfig = {
       ...createTestConfig(),
@@ -523,12 +937,12 @@ describe("rate limiting", () => {
       }
     } as never;
 
-    expect(() => consumeRateLimit(store, invalidConfig, {
+    await expect(consumeRateLimit(store, invalidConfig, {
       identityType: "anonymous",
       tier: "free",
       scopes: [],
       rateLimitSubject: "127.0.0.1"
-    })).toThrow("Unsupported rate limit duration");
+    })).rejects.toThrow("Unsupported rate limit duration");
   });
 });
 
@@ -542,23 +956,20 @@ describe("audit logging", () => {
         jwtClaimSnapshot: ["iss", "aud", "sub", "org_id", "unique_user_id"]
       }
     });
-    appsToClose.push(async () => {
+    try {
+      const token = await signTestJwt();
+      await app.inject({
+        method: "GET",
+        url: "/jwt",
+        headers: { authorization: `Bearer ${token}` }
+      });
+      await app.inject({
+        method: "GET",
+        url: "/jwt"
+      });
+    } finally {
       await app.close();
-      if (fs.existsSync(auditPath)) {
-        fs.unlinkSync(auditPath);
-      }
-    });
-
-    const token = await signTestJwt();
-    await app.inject({
-      method: "GET",
-      url: "/jwt",
-      headers: { authorization: `Bearer ${token}` }
-    });
-    await app.inject({
-      method: "GET",
-      url: "/jwt"
-    });
+    }
 
     const rows = readAuditRows(auditPath);
     expect(rows).toHaveLength(2);
@@ -574,6 +985,48 @@ describe("audit logging", () => {
       org_id: "org-active",
       unique_user_id: "user-1"
     });
+    if (fs.existsSync(auditPath)) {
+      fs.unlinkSync(auditPath);
+    }
+  });
+
+  it("stores only approved JWT claims in audit snapshots", async () => {
+    const auditPath = path.join(process.cwd(), ".tmp-audit-redaction.sqlite");
+    const { app } = await createTestApp({
+      audit: {
+        enabled: true,
+        sqlitePath: auditPath,
+        jwtClaimSnapshot: ["iss", "aud", "sub"]
+      }
+    });
+    try {
+      const token = await signTestJwt({
+        display_name: "Ava",
+        unique_user_id: "user-1"
+      });
+
+      await app.inject({
+        method: "GET",
+        url: "/jwt",
+        headers: { authorization: `Bearer ${token}` }
+      });
+    } finally {
+      await app.close();
+    }
+
+    const rows = readAuditRows(auditPath);
+    const snapshot = JSON.parse(rows[0]?.jwt_claim_snapshot ?? "{}");
+
+    expect(snapshot).toEqual({
+      iss: "test-issuer",
+      aud: "test-audience",
+      sub: "user-1"
+    });
+    expect(snapshot.display_name).toBeUndefined();
+    expect(snapshot.unique_user_id).toBeUndefined();
+    if (fs.existsSync(auditPath)) {
+      fs.unlinkSync(auditPath);
+    }
   });
 
   it("keeps audit rows append-only across repeated allowed requests", async () => {
@@ -585,19 +1038,21 @@ describe("audit logging", () => {
         jwtClaimSnapshot: ["iss", "aud", "sub", "org_id", "unique_user_id"]
       }
     });
-    appsToClose.push(async () => {
+    try {
+      await app.inject({ method: "GET", url: "/api", remoteAddress: "10.0.0.7" });
+      await app.inject({ method: "GET", url: "/api", remoteAddress: "10.0.0.8" });
+    } finally {
       await app.close();
-      if (fs.existsSync(auditPath)) {
-        fs.unlinkSync(auditPath);
-      }
-    });
-
-    await app.inject({ method: "GET", url: "/api", remoteAddress: "10.0.0.7" });
-    await app.inject({ method: "GET", url: "/api", remoteAddress: "10.0.0.8" });
+    }
 
     const rows = readAuditRows(auditPath);
     expect(rows).toHaveLength(2);
     expect(rows[0]?.outcome).toBe("allowed");
     expect(rows[1]?.outcome).toBe("allowed");
+    if (fs.existsSync(auditPath)) {
+      fs.unlinkSync(auditPath);
+    }
   });
 });
+
+

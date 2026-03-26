@@ -129,3 +129,12 @@ OpenGate is a library-first security gateway for existing website or backend API
 ## Open Questions
 - No blocking open questions are currently identified at the Step 4 spec level.
 
+## Phase 1 Security Extension
+The MVP spec above remains the baseline story. The shipped Phase 1 security upgrade extends that baseline without changing the product shape:
+
+- OpenGate still supports shared-secret JWT verification for demo and legacy deployments.
+- OpenGate now also supports production JWT verification through remote JWKS issuers.
+- JWT issuer configs can now be disabled explicitly.
+- API-key clients can now carry multiple hashed key versions for overlap rotation and revocation windows.
+- Audit JWT claim snapshots remain globally configured and are now validated against an approved identity-claim allowlist before startup.
+

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenGate 0.1.0 Upgrade Notes</title>
+    <link rel="stylesheet" href="../../styles.css" />
+  </head>
+  <body>
+    <div class="site">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark">OG</div>
+          <div>
+            <div class="brand-title">Upgrade Notes</div>
+            <div class="version-pill">OpenGate 0.1.0</div>
+          </div>
+        </div>
+        <a class="version-pill" href="./index.html">Back to overview</a>
+      </header>
+
+      <div class="layout">
+        <aside class="sidebar">
+          <h2>Sections</h2>
+          <nav>
+            <a href="./install.html">Install guide</a>
+            <a href="./reference.html">Package reference</a>
+            <a href="./upgrade.html">Upgrade notes</a>
+          </nav>
+        </aside>
+
+        <main class="content">
+          <section class="section">
+            <h2>Versioning model</h2>
+            <p>
+              OpenGate uses Changesets for coordinated package versioning and changelog generation.
+              The root package stays backward compatible while adapter packages and starter docs can move in lockstep.
+            </p>
+          </section>
+
+          <section class="section">
+            <h2>Upgrade checklist</h2>
+            <ul>
+              <li>Keep the root <code>opengate</code> import if you are on the compatibility path.</li>
+              <li>Move to explicit adapter packages when you want framework-specific installs.</li>
+              <li>Update starter usage from <code>--route</code> to <code>--template</code> when you want the flagship path.</li>
+            </ul>
+          </section>
+
+          <section class="section">
+            <h2>Release notes</h2>
+            <p>
+              Release notes are generated from changesets and shipped with each published package set.
+              This keeps package upgrades and docs in sync.
+            </p>
+          </section>
+        </main>
+      </div>
+    </div>
+  </body>
+</html>

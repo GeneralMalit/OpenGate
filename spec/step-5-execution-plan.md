@@ -28,17 +28,20 @@ The spec is now clear enough to plan execution. This plan maps implementation wo
   - Maps to spec: `28`, `30`, `31`, `32`, `66`
 
 ## Phase 3 - Policy, Tiering, and Audit
-- [ ] Implement route policy matching with longest-prefix behavior and access modes.
+Current repository status:
+- Implemented in the current codebase: shared transport-neutral request processing now powers both Fastify and Express adapters, with the current Fastify API preserved and an Express demo added for parity.
+
+- [x] Implement route policy matching with longest-prefix behavior and access modes.
   - Maps to spec: `21`, `23`, `24`, `25`, `26`, `27`, `28`, `34`
-- [ ] Implement optional scope enforcement.
+- [x] Implement optional scope enforcement.
   - Maps to spec: `30`, `34`
-- [ ] Implement free-tier and upgraded-tier rate limiting with configurable storage and in-memory default.
+- [x] Implement free-tier and upgraded-tier rate limiting with configurable storage and in-memory default.
   - Maps to spec: `31`, `32`, `35`, `36`, `37`, `38`, `39`, `40`, `41`, `68`
-- [ ] Implement calendar-day reset logic with configurable timezone and default `UTC`.
+- [x] Implement calendar-day reset logic with configurable timezone and default `UTC`.
   - Maps to spec: `41`, `68`
-- [ ] Implement default rejection status/message behavior.
+- [x] Implement default rejection status/message behavior.
   - Maps to spec: `37`, `42`, `43`, `44`, `45`
-- [ ] Implement SQLite audit logging with route-policy id, identity context, organization context, and selected JWT claims.
+- [x] Implement SQLite audit logging with route-policy id, identity context, organization context, and selected JWT claims.
   - Maps to spec: `44`, `45`, `46`, `47`, `48`, `49`, `50`, `51`, `52`, `53`, `54`, `55`, `56`, `57`
 
 ## Phase 4 - Example Website
@@ -93,4 +96,38 @@ The spec is now clear enough to plan execution. This plan maps implementation wo
 - The user agrees the phases and ordering make sense.
 - The user agrees the "three things" section is capturing the right hidden risks.
 - The plan is specific enough that Step 6 can request tests first and then execute in phases.
+
+## Roadmap Phase 1 Follow-On
+With the MVP now implemented, the next accepted execution track is the roadmap Phase 1 security hardening pass:
+
+- add dual-mode JWT support with shared-secret demo issuers and production JWKS issuers
+- add issuer disablement and JWKS rotation handling
+- add versioned API-key rotation and revocation semantics
+- harden audit redaction so only approved JWT claims can be stored
+- document the migration path from legacy shared-secret and single-hash configs
+
+## Roadmap Phase 4 Follow-On
+The scale-out path is now also implemented in the current codebase:
+
+- add Redis as a rate-limit store for distributed deployments
+- add buffered asynchronous audit writes
+- add PostgreSQL as a durable audit sink
+- keep the in-memory and SQLite defaults for local and single-node usage
+- document the operational split between local defaults and multi-node backends
+
+## Roadmap Phase 5 Follow-On
+The operational visibility layer is also implemented in the current codebase:
+
+- add request correlation IDs to the request context and audit rows
+- add structured logger adapters for request completion events
+- expose health, readiness, metrics, and status routes through the same library helpers
+- keep the operational routes lightweight so they fit the library-first integration style
+
+## Roadmap Phase 7 Follow-On
+The distribution layer is also implemented in the current codebase:
+
+- publish explicit Fastify and Express adapter packages alongside the root compatibility package
+- add starter templates for the website, API, and partner/server-to-server paths
+- keep the docs repo-owned and versioned alongside the packages
+- replace the old single-package release flow with Changesets-based version PRs
 

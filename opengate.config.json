@@ -12,6 +12,8 @@
       {
         "issuer": "opengate-demo-auth",
         "audiences": ["opengate-example-api"],
+        "enabled": true,
+        "verificationMode": "shared_secret",
         "sharedSecret": "demo-shared-secret",
         "organizationClaim": "org_id",
         "subjectClaim": "sub",
@@ -28,7 +30,14 @@
         "name": "Demo Service Client",
         "organizationId": "demo-org",
         "userId": "service-user-1",
-        "keyHash": "18a5f8b5d38ae1231f9f731bf8d70cb07f0f8b09153db2f2e9f0efad0df75557",
+        "keyVersions": [
+          {
+            "id": "demo-client-1-primary",
+            "keyHash": "18a5f8b5d38ae1231f9f731bf8d70cb07f0f8b09153db2f2e9f0efad0df75557",
+            "createdAt": "2026-03-25T00:00:00.000Z",
+            "enabled": true
+          }
+        ],
         "scopes": ["time:read"],
         "enabled": true
       }

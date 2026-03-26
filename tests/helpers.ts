@@ -1,10 +1,13 @@
 import os from "node:os";
 import path from "node:path";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import express from "express";
 import Fastify from "fastify";
 import Database from "better-sqlite3";
 import cookie from "@fastify/cookie";
-import { SignJWT } from "jose";
-import { createOpenGate, hashApiKey } from "../src/index.js";
+import { exportJWK, generateKeyPair, SignJWT, type KeyLike } from "jose";
+import { createExpressOpenGate, createOpenGate, hashApiKey } from "../src/index.js";
 import type { OpenGateConfig } from "../src/lib/types.js";
 
 export function createTestConfig(overrides: Partial<OpenGateConfig> = {}): OpenGateConfig {
@@ -185,12 +188,85 @@ export async function createTestApp(configOverrides: Partial<OpenGateConfig> = {
     })
   });
 
-  app.addHook("onClose", (_instance, done) => {
-    gate.close();
-    done();
+  gate.registerOperationalRoutes(app);
+
+  app.addHook("onClose", async () => {
+    await gate.close();
   });
 
   return { app, config };
+}
+
+export async function createExpressTestApp(configOverrides: Partial<OpenGateConfig> = {}) {
+  const config = createTestConfig(configOverrides);
+  const gate = createExpressOpenGate(config);
+  const app = express();
+
+  app.use(express.urlencoded({ extended: false }));
+
+  gate.registerProtectedRoute(app, {
+    path: "/api",
+    method: "GET",
+    handler: async (request) => ({
+      ok: true,
+      identityType: request.opengate?.identity.identityType,
+      policyId: request.opengate?.routePolicy.id
+    })
+  });
+
+  gate.registerProtectedRoute(app, {
+    path: "/jwt",
+    method: "GET",
+    handler: async (request) => ({
+      ok: true,
+      identityType: request.opengate?.identity.identityType
+    })
+  });
+
+  gate.registerProtectedRoute(app, {
+    path: "/api-key",
+    method: "GET",
+    handler: async (request) => ({
+      ok: true,
+      identityType: request.opengate?.identity.identityType
+    })
+  });
+
+  gate.registerProtectedRoute(app, {
+    path: "/authed",
+    method: "GET",
+    handler: async (request) => {
+      const identity = request.opengate?.identity;
+
+      return {
+        ok: true,
+        identityType: identity?.identityType,
+        subject:
+          identity && "subject" in identity
+            ? identity.subject
+            : null
+      };
+    }
+  });
+
+  gate.registerProtectedRoute(app, {
+    path: "/scoped",
+    method: "GET",
+    handler: async () => ({ ok: true })
+  });
+
+  gate.registerProtectedRoute(app, {
+    path: "/policies/long/value",
+    method: "GET",
+    handler: async (request) => ({
+      ok: true,
+      policyId: request.opengate?.routePolicy.id
+    })
+  });
+
+  gate.registerOperationalRoutes(app);
+
+  return { app, gate, config };
 }
 
 export async function signTestJwt(overrides: Record<string, unknown> = {}) {
@@ -209,7 +285,7 @@ export async function signTestJwt(overrides: Record<string, unknown> = {}) {
     .setAudience((overrides.aud as string | undefined) ?? issuerConfig.audiences[0])
     .setIssuedAt()
     .setExpirationTime("1h")
-    .sign(new TextEncoder().encode(issuerConfig.sharedSecret));
+    .sign(new TextEncoder().encode("sharedSecret" in issuerConfig ? issuerConfig.sharedSecret : "test-shared-secret"));
 }
 
 export type AuditRow = {
@@ -226,3 +302,86 @@ export function readAuditRows(sqlitePath: string): AuditRow[] {
   db.close();
   return rows;
 }
+
+export async function createJwksTestServer() {
+  const publishedKeys: Array<Record<string, unknown>> = [];
+  const server = createServer((request, response) => {
+    if (request.url !== "/.well-known/jwks.json") {
+      response.statusCode = 404;
+      response.end();
+      return;
+    }
+
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({ keys: publishedKeys }));
+  });
+
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", () => resolve());
+  });
+
+  const address = server.address() as AddressInfo;
+
+  async function createSigningKey(kid: string) {
+    const { publicKey, privateKey } = await generateKeyPair("RS256");
+    const publicJwk = await exportJWK(publicKey);
+
+    return {
+      kid,
+      alg: "RS256",
+      privateKey,
+      publicJwk: {
+        ...publicJwk,
+        kid,
+        alg: "RS256",
+        use: "sig"
+      }
+    };
+  }
+
+  return {
+    issuer: "https://opengate.test/jwks",
+    audience: "opengate-jwks-audience",
+    jwksUrl: `http://127.0.0.1:${address.port}/.well-known/jwks.json`,
+    createSigningKey,
+    publishKeys(keys: Array<{ publicJwk: Record<string, unknown> }>) {
+      publishedKeys.splice(0, publishedKeys.length, ...keys.map((key) => key.publicJwk));
+    },
+    async signJwt(
+      key: { kid: string; alg: string; privateKey: KeyLike },
+      overrides: Record<string, unknown> = {},
+      options: { includeKid?: boolean } = {}
+    ) {
+      return new SignJWT({
+        sub: "user-1",
+        org_id: "org-active",
+        unique_user_id: "user-1",
+        scope: "time:read admin:read",
+        ...overrides
+      })
+        .setProtectedHeader({
+          alg: key.alg,
+          ...(options.includeKid === false ? {} : { kid: key.kid })
+        })
+        .setIssuer((overrides.iss as string | undefined) ?? "https://opengate.test/jwks")
+        .setAudience((overrides.aud as string | undefined) ?? "opengate-jwks-audience")
+        .setIssuedAt()
+        .setExpirationTime("1h")
+        .sign(key.privateKey);
+    },
+    async close() {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+
+          resolve();
+        });
+      });
+    }
+  };
+}
+
+

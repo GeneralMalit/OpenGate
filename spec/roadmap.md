@@ -47,6 +47,10 @@ Exit criteria:
 
 The MVP is intentionally simple. The first upgrade phase should make the security model stronger without changing the product shape.
 
+Current repository status:
+- Implemented in the current codebase: dual-mode JWT support (`shared_secret` demo mode plus remote `jwks` production mode), issuer disablement, versioned API-key rotation windows, JWKS refresh-on-unknown-`kid`, and validated audit claim allowlists.
+- Still deferred to later phases: distributed JWKS caching, per-token JWT deny lists, and broader control-plane workflows.
+
 Upgrade:
 - Replace shared-secret JWT verification with asymmetric JWT verification for production deployments.
 - Add JWKS support so OpenGate can consume rotating public keys from external identity providers.
@@ -74,6 +78,10 @@ Exit criteria:
 
 A great product is not only correct, it is easy to adopt. The next upgrade phase should focus on reducing setup friction.
 
+Current repository status:
+- Implemented in the current codebase: `opengate init`, friendly config validation, migration normalization for legacy config shapes, and generated starter files for public, JWT, API-key, and mixed-auth routes.
+- Starter output includes a config file, a sample server file, demo credentials, and a sample audit artifact for local development.
+
 Upgrade:
 - Add a CLI initializer, such as `opengate init`, that generates a config file and a starter route.
 - Add a config validator that explains errors in plain language.
@@ -100,6 +108,10 @@ Exit criteria:
 
 The MVP is Fastify-first, which is the right starting point. The next stage is making the core policy model reusable across more frameworks.
 
+Current repository status:
+- Implemented in the current codebase: a transport-neutral request core shared by Fastify and Express, Fastify compatibility preserved, and an Express adapter/example that reuses the same config and route-policy model.
+- Still deferred to later phases: Hono and any additional adapters beyond the first Express split.
+
 Upgrade:
 - Add adapters for additional Node frameworks, starting with Express or Hono.
 - Separate the pure policy engine from the transport adapter so the core logic is framework-agnostic.
@@ -124,6 +136,10 @@ Exit criteria:
 ## Phase 4 - Make Rate Limiting And Audit Scale Out
 
 The MVP uses simple local storage because that is the right tradeoff for a first release. A 10/10 product needs distributed storage options.
+
+Current repository status:
+- Implemented in the current codebase: in-memory and Redis rate limiting, buffered async audit logging, and PostgreSQL audit sink support with shutdown flush behavior.
+- Still deferred to later phases: retention automation, archival workflows, distributed cache coordination, and any stronger durability guarantees beyond the current store choices.
 
 Upgrade:
 - Add Redis as a rate-limit store for horizontally scaled deployments.
@@ -151,6 +167,10 @@ Exit criteria:
 
 A good security product should be easy to observe. If a team cannot see what OpenGate is doing, they will not trust it in production.
 
+Current repository status:
+- Implemented in the current codebase: in-process metrics, request correlation IDs, structured logger adapters, and built-in `/healthz`, `/readyz`, `/metrics`, and `/status` routes.
+- Still deferred to later phases: full tracing export and richer dashboards/alerting integrations.
+
 Upgrade:
 - Add metrics for allowed requests, blocked requests, rate-limit hits, auth failures, and audit write failures.
 - Add tracing or request correlation identifiers for end-to-end debugging.
@@ -177,16 +197,20 @@ Exit criteria:
 
 Once the core engine is strong, the product can grow into a more complete platform.
 
+Current repository status:
+- Implemented in the current codebase: a file-backed control plane with CLI commands, protected admin routes, JSON import/export, request simulation, and a lightweight protected admin UI in the example apps.
+- Still deferred to later phases: database-backed runtime management, approvals/workflows, and broader product surface area.
+
 Upgrade:
-- Add a lightweight admin interface or control plane for policies and keys.
-- Add self-serve API-key issuance and revocation workflows.
+- Add a lightweight admin interface or control plane for policies, keys, tenants, and users.
+- Add self-serve API-key issuance, rotation, disablement, and revocation workflows.
 - Add organization-level management for tenants, users, and access policies.
-- Add import/export for policy configurations.
+- Add JSON import/export for policy configurations and operational state.
 - Add a local policy preview or simulation tool so teams can test a config before rollout.
 
 Do:
-- Keep the engine and the product UI separate.
-- Let the UI talk to the same config and policy model the runtime uses.
+- Keep the engine and the product layer separate.
+- Let the control plane talk to the same config and policy model the runtime uses.
 - Make policy changes reviewable, auditable, and reversible.
 - Keep the first-party demo app and the real product control plane clearly separated.
 
@@ -202,6 +226,10 @@ Exit criteria:
 ## Phase 7 - Improve Distribution And Ecosystem Fit
 
 The final step toward a 10/10 product is making OpenGate fit naturally into the developer ecosystem around it.
+
+Current repository status:
+- Implemented in the current codebase: a workspace-style package layout, explicit Fastify and Express adapter packages, starter templates for website/API/partner flows, a versioned docs site, and Changesets-based release tooling.
+- Still deferred to later phases: Hono, deeper multi-package ecosystem expansion, and any hosted docs platform beyond the repo-owned static site.
 
 Upgrade:
 - Publish clear adapter packages, starter templates, and example apps.
