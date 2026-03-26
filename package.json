@@ -5,6 +5,7 @@
   "license": "MIT",
   "type": "module",
   "workspaces": [
+    ".",
     "packages/*"
   ],
   "main": "dist/src/index.js",
@@ -38,7 +39,7 @@
     "mock:dev": "tsx examples/mock-website/server.ts",
     "express:dev": "tsx examples/express-website/server.ts",
     "build:root": "tsc -p tsconfig.json",
-    "build:packages": "npm run build --workspaces --if-present",
+    "build:packages": "npm run build -w @opengate/express -w @opengate/fastify",
     "build": "npm run build:root && npm run build:packages",
     "docs:build": "node scripts/build-docs.mjs",
     "start": "node dist/examples/website/server.js",

@@ -2,6 +2,8 @@ node_modules/
 dist/
 docs-site/dist/
 coverage/
+.tmp-*.sqlite-shm
+.tmp-*.sqlite-wal
 .env
 .data/
 data/
