@@ -219,11 +219,11 @@ Phase 5 visibility is now available too:
 
 ## Versioning
 
-OpenGate follows semantic versioning. Release versions are coordinated through Changesets, and the release workflow opens a version PR on pushes to `main`.
+OpenGate follows semantic versioning. Release versions are coordinated through semantic-release, and the release workflow tags releases on pushes to `main`.
 
 In practice:
-- changesets define the package version bump
-- the release workflow opens a version PR with coordinated package updates and changelogs
+- conventional commits define the release bump
+- the release workflow updates package versions and changelogs, then publishes a GitHub release
 - the current root package stays backward compatible while the adapter packages and docs move in lockstep
 
 ## License
