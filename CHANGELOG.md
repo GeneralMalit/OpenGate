@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/GeneralMalit/OpenGate/compare/v1.1.0...v1.1.1) (2026-03-27)
+
+
+### Bug Fixes
+
+* separate disabled-user policy and align postgres audit schema ([c434f1b](https://github.com/GeneralMalit/OpenGate/commit/c434f1b8ca635385a95be3d5e31e86499c77a344))
+
 # [1.1.0](https://github.com/GeneralMalit/OpenGate/compare/v1.0.0...v1.1.0) (2026-03-26)
 
 

@@ -1,6 +1,6 @@
 {
   "name": "@opengate/fastify",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Fastify adapter package for OpenGate.",
   "license": "MIT",
   "type": "module",
@@ -22,7 +22,7 @@
     "build": "tsc -p tsconfig.json"
   },
   "peerDependencies": {
-    "opengate": "^1.1.0",
+    "opengate": "^1.1.1",
     "fastify": "^4.26.2"
   }
 }
