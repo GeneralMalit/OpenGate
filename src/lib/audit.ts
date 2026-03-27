@@ -220,23 +220,31 @@ export function createPostgresAuditSink(auditConfig: Pick<AuditConfig, "postgres
   const tableName = auditConfig.postgresTable ?? "audit_events";
   const pool = new Pool({ connectionString: auditConfig.postgresUrl });
 
-  const init = pool.query(`
-    CREATE TABLE IF NOT EXISTS ${quoteIdentifier(tableName)} (
-      id BIGSERIAL PRIMARY KEY,
-      occurred_at TEXT NOT NULL,
-      route_policy_id TEXT NOT NULL,
-      identity_type TEXT NOT NULL,
-      organization_id TEXT,
-      secondary_identifier TEXT,
-      method TEXT NOT NULL,
-      path TEXT NOT NULL,
-      status_code INTEGER NOT NULL,
-      latency_ms DOUBLE PRECISION NOT NULL,
-      outcome TEXT NOT NULL,
-      block_reason TEXT,
-      jwt_claim_snapshot JSONB
-    );
-  `);
+  const init = (async () => {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ${quoteIdentifier(tableName)} (
+        id BIGSERIAL PRIMARY KEY,
+        occurred_at TEXT NOT NULL,
+        request_id TEXT NOT NULL,
+        route_policy_id TEXT NOT NULL,
+        identity_type TEXT NOT NULL,
+        organization_id TEXT,
+        secondary_identifier TEXT,
+        method TEXT NOT NULL,
+        path TEXT NOT NULL,
+        status_code INTEGER NOT NULL,
+        latency_ms DOUBLE PRECISION NOT NULL,
+        outcome TEXT NOT NULL,
+        block_reason TEXT,
+        jwt_claim_snapshot JSONB
+      );
+    `);
+
+    await pool.query(`
+      ALTER TABLE ${quoteIdentifier(tableName)}
+      ADD COLUMN IF NOT EXISTS request_id TEXT;
+    `);
+  })();
 
   return {
     async writeBatch(events: AuditEvent[]) {

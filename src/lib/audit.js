@@ -185,6 +185,7 @@ export function createPostgresAuditSink(auditConfig) {
     CREATE TABLE IF NOT EXISTS ${quoteIdentifier(tableName)} (
       id BIGSERIAL PRIMARY KEY,
       occurred_at TEXT NOT NULL,
+      request_id TEXT NOT NULL,
       route_policy_id TEXT NOT NULL,
       identity_type TEXT NOT NULL,
       organization_id TEXT,
@@ -198,12 +199,17 @@ export function createPostgresAuditSink(auditConfig) {
       jwt_claim_snapshot JSONB
     );
   `);
+    const ensureRequestIdColumn = pool.query(`
+    ALTER TABLE ${quoteIdentifier(tableName)}
+    ADD COLUMN IF NOT EXISTS request_id TEXT;
+  `);
     return {
         async writeBatch(events) {
             if (!events.length) {
                 return;
             }
             await init;
+            await ensureRequestIdColumn;
             const client = await pool.connect();
             try {
                 await client.query("BEGIN");

@@ -179,7 +179,7 @@ async function verifyJwt(config, token) {
                 blockReason: "user_not_found"
             };
         }
-        if (user.enabled === false && (config.behavior?.onDisabledOrganization ?? "block") === "block") {
+        if (user.enabled === false && (config.behavior?.onDisabledUser ?? "block") === "block") {
             return {
                 ok: false,
                 statusCode: 403,
@@ -246,7 +246,7 @@ function verifyApiKey(config, rawApiKey) {
                 blockReason: "user_not_found"
             };
         }
-        if (user.enabled === false && (config.behavior?.onDisabledOrganization ?? "block") === "block") {
+        if (user.enabled === false && (config.behavior?.onDisabledUser ?? "block") === "block") {
             return {
                 ok: false,
                 statusCode: 403,

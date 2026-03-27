@@ -162,7 +162,8 @@ const configSchema = z.object({
   behavior: z.object({
     onMissingSecondaryIdentifier: z.enum(["reject", "allow"]).default("reject"),
     onCredentialMismatch: z.enum(["deny", "prefer_jwt"]).default("deny"),
-    onDisabledOrganization: z.enum(["block", "allow"]).default("block")
+    onDisabledOrganization: z.enum(["block", "allow"]).default("block"),
+    onDisabledUser: z.enum(["block", "allow"]).default("block")
   }).default({})
 });
 

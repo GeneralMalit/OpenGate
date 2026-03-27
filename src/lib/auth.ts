@@ -273,7 +273,7 @@ async function verifyJwt(config: OpenGateConfig, token: string): Promise<JwtAuth
       };
     }
 
-    if (user.enabled === false && (config.behavior?.onDisabledOrganization ?? "block") === "block") {
+    if (user.enabled === false && (config.behavior?.onDisabledUser ?? "block") === "block") {
       return {
         ok: false,
         statusCode: 403,
@@ -349,7 +349,7 @@ function verifyApiKey(config: OpenGateConfig, rawApiKey: string): ApiKeyAuthResu
       };
     }
 
-    if (user.enabled === false && (config.behavior?.onDisabledOrganization ?? "block") === "block") {
+    if (user.enabled === false && (config.behavior?.onDisabledUser ?? "block") === "block") {
       return {
         ok: false,
         statusCode: 403,

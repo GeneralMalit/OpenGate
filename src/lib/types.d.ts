@@ -170,6 +170,7 @@ export type BehaviorConfig = {
     onMissingSecondaryIdentifier?: "reject" | "allow";
     onCredentialMismatch?: "deny" | "prefer_jwt";
     onDisabledOrganization?: "block" | "allow";
+    onDisabledUser?: "block" | "allow";
 };
 export type IdentityContextRuleConfig = {
     source: "jwt_claim";

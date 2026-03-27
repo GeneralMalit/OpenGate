@@ -209,7 +209,8 @@ function createStarterConfig(
     behavior: {
       onMissingSecondaryIdentifier: "reject",
       onCredentialMismatch: "deny",
-      onDisabledOrganization: "block"
+      onDisabledOrganization: "block",
+      onDisabledUser: "block"
     }
   };
 }
