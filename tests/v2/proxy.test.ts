@@ -16,7 +16,6 @@ const servers: Array<ReturnType<typeof createServer>> = [];
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))));
 });
-
 function listen(handler: (request: IncomingMessage, response: ServerResponse) => void): Promise<{ server: ReturnType<typeof createServer>; url: URL }> {
   const server = createServer(handler);
   servers.push(server);

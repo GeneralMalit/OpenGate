@@ -34,7 +34,6 @@ describe("v2 CLI", () => {
     expect(output.join("\n")).not.toContain("a secure password");
   });
 });
-
 describe("v2 setup UI", () => {
   it("renders same-origin API calls and the core setup workflows", () => {
     const html = renderSetupPage({ apiBasePath: "/control/api", csrfToken: "csrf-token", nonce: "nonce-1" });
