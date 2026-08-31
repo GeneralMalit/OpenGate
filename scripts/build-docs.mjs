@@ -5,22 +5,18 @@ import { fileURLToPath } from "node:url";
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const sourceDir = path.join(rootDir, "docs-site", "src");
 const outputDir = path.join(rootDir, "docs-site", "dist");
-const packageJsonPath = path.join(rootDir, "package.json");
-
-const packageJson = JSON.parse(await fs.readFile(packageJsonPath, "utf8"));
-const version = packageJson.version;
-const versionDir = path.join(sourceDir, "versions", version);
 
 await fs.rm(outputDir, { recursive: true, force: true });
 await fs.mkdir(outputDir, { recursive: true });
 
 await copyDirectory(sourceDir, outputDir);
 
-if (!(await exists(versionDir))) {
-  throw new Error(`Missing versioned docs directory: ${path.relative(rootDir, versionDir)}`);
+const versionsDir = path.join(sourceDir, "versions");
+if (!(await exists(versionsDir))) {
+  throw new Error(`Missing versioned docs directory: ${path.relative(rootDir, versionsDir)}`);
 }
 
-console.log(`Built docs site for version ${version}`);
+console.log("Built docs site.");
 
 async function copyDirectory(source, destination) {
   await fs.mkdir(destination, { recursive: true });

@@ -1,7 +1,7 @@
 {
   "name": "opengate",
   "version": "1.1.1",
-  "description": "Library-first API endpoint protection with tiering, rate limiting, and audit logging.",
+  "description": "Standalone universal API access gateway with role-based permissions, quotas, and audit logging.",
   "license": "MIT",
   "type": "module",
   "workspaces": [
@@ -32,17 +32,21 @@
     "package.json"
   ],
   "bin": {
-    "opengate": "dist/src/cli.js"
+    "opengate": "dist/src/v2/main.js",
+    "opengate-legacy": "dist/src/cli.js"
   },
   "scripts": {
-    "dev": "tsx examples/website/server.ts",
+    "dev": "tsx src/v2/main.ts serve",
+    "v2:dev": "tsx src/v2/main.ts serve",
+    "v2:bootstrap-admin": "tsx src/v2/main.ts bootstrap-admin",
+    "legacy:dev": "tsx examples/website/server.ts",
     "mock:dev": "tsx examples/mock-website/server.ts",
     "express:dev": "tsx examples/express-website/server.ts",
     "build:root": "tsc -p tsconfig.json",
     "build:packages": "npm run build -w @opengate/express -w @opengate/fastify",
     "build": "npm run build:root && npm run build:packages",
     "docs:build": "node scripts/build-docs.mjs",
-    "start": "node dist/examples/website/server.js",
+    "start": "node dist/src/v2/main.js serve",
     "cli": "tsx src/cli.ts",
     "pretest": "npm run build",
     "test": "vitest run",
@@ -54,6 +58,7 @@
   "dependencies": {
     "@fastify/cookie": "^9.4.0",
     "@fastify/formbody": "^7.4.0",
+    "argon2": "^0.44.0",
     "better-sqlite3": "^11.5.0",
     "express": "^4.21.2",
     "fastify": "^4.26.2",
@@ -75,8 +80,8 @@
     "@types/pg": "^8.20.0",
     "@types/supertest": "^6.0.3",
     "@vitest/coverage-v8": "^2.1.8",
-    "supertest": "^7.1.4",
     "semantic-release": "^24.2.1",
+    "supertest": "^7.1.4",
     "tsx": "^4.20.6",
     "typescript": "^5.4.5",
     "vitest": "^2.1.8"

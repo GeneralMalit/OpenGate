@@ -1,231 +1,199 @@
 # OpenGate
 
-OpenGate is a library-first security gate for existing HTTP API endpoints. You install it inside your backend, point it at the route you want to protect, and it handles caller identification, tiering, rate limiting, and audit logging before your handler runs.
+> Status: the standalone v2 gateway is implemented in `src/v2`. The earlier Node-library code remains in this repository as legacy code during the migration.
 
-The current library supports two JWT modes:
-- demo mode with shared-secret JWT verification
-- production mode with remote JWKS verification, issuer disablement, and key rotation support
+The build-ready architecture and phased delivery plan are in [spec/v2-implementation-plan.md](spec/v2-implementation-plan.md).
 
-The distribution model now includes:
-- the root compatibility package, `opengate`
-- explicit adapter packages, `@opengate/fastify` and `@opengate/express`
-- template-driven starters for website, API, and partner/server-to-server installs
-- a versioned docs site in [docs-site](docs-site)
+## Run OpenGate v2
 
-## Tech Stack
+The first v2 runtime is a standalone, single-node service backed by SQLite. It does not require Docker or Kubernetes.
 
-<table>
-  <tr>
-    <td><img src="https://img.shields.io/badge/Fastify-4.26.2-111111?style=for-the-badge&logo=fastify&logoColor=white" alt="Fastify 4.26.2" /></td>
-    <td><img src="https://img.shields.io/badge/TypeScript-5.4.5-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript 5.4.5" /></td>
-    <td><img src="https://img.shields.io/badge/Zod-3.24.1-3E67B1?style=for-the-badge" alt="Zod 3.24.1" /></td>
-    <td><img src="https://img.shields.io/badge/JOSE-5.9.6-444444?style=for-the-badge" alt="JOSE 5.9.6" /></td>
-  </tr>
-  <tr>
-    <td><img src="https://img.shields.io/badge/Better--SQLite3-11.5.0-4D4D4D?style=for-the-badge" alt="Better-SQLite3 11.5.0" /></td>
-    <td><img src="https://img.shields.io/badge/Vitest-2.1.8-6E9F18?style=for-the-badge" alt="Vitest 2.1.8" /></td>
-    <td><img src="https://img.shields.io/badge/%40fastify%2Fcookie-9.4.0-7A7A7A?style=for-the-badge" alt="@fastify/cookie 9.4.0" /></td>
-    <td><img src="https://img.shields.io/badge/%40fastify%2Fformbody-7.4.0-7A7A7A?style=for-the-badge" alt="@fastify/formbody 7.4.0" /></td>
-    <td><img src="https://img.shields.io/badge/Express-4.21.2-111111?style=for-the-badge&logo=express&logoColor=white" alt="Express 4.21.2" /></td>
-  </tr>
-</table>
-
-## Screenshots
-
-Anonymous request state:
-
-![OpenGate anonymous example](docs/screenshots/example-anonymous.png)
-
-Upgraded request state after login and `/api` access:
-
-![OpenGate upgraded example](docs/screenshots/example-upgraded.png)
-
-## How It Works
-
-OpenGate sits between the request and the handler that eventually serves it. The host app still owns the route and the business logic, but OpenGate becomes the layer that decides whether the request should reach that logic at all.
-
-Before installation, the endpoint is exposed directly:
-
-```mermaid
-flowchart LR
-  client[Client] --> app[Host App]
-  app --> handler[Route Handler]
-```
-
-After installation, OpenGate sits in front of the handler:
-
-```mermaid
-flowchart LR
-  client[Client] --> gate[OpenGate]
-  gate --> handler[Protected Handler]
-```
-
-The request flow is deliberately small and predictable:
-
-```mermaid
-flowchart TD
-  req[Incoming Request] --> policy[Resolve Route Policy]
-  policy --> access{Access Mode}
-  access -->|public| identify[Resolve Identity Context]
-  access -->|authenticated| auth[Check JWT or API Key]
-  access -->|jwt| jwt[Validate JWT]
-  access -->|api_key| key[Validate API Key]
-  jwt --> identify
-  key --> identify
-  auth --> identify
-  identify --> rate[Apply Rate Limit]
-  rate --> audit[Write Audit Event]
-  audit --> ok{Allowed?}
-  ok -->|yes| handler[Run Protected Handler]
-  ok -->|no| deny[Return Rejection]
-```
-
-Configuration stays local and explicit. The config file is the source of truth, and each section controls one part of the gate:
-
-```mermaid
-flowchart LR
-  cfg[opengate.config.json]
-  cfg --> orgs[Organizations]
-  cfg --> jwt[JWT Issuers]
-  cfg --> keys[API Keys]
-  cfg --> id[Identity Context]
-  cfg --> routes[Route Policies]
-  cfg --> limits[Rate Limits]
-  cfg --> audit[Audit Settings]
-  cfg --> behavior[Behavior Overrides]
-```
-
-The MVP is Fastify-first, which keeps the integration surface small and practical. The handler you already have is still the handler you keep; OpenGate simply becomes the layer in front of it, with the config file controlling how much of the gate is strict, permissive, or customized.
-
-## Installation
-
-The detailed installation guide lives in [docs/INSTALLATION.md](docs/INSTALLATION.md).
-
-If you are integrating OpenGate into your own endpoint, that guide walks through:
-- demo/shared-secret setup
-- production/JWKS setup
-- versioned API-key rotation
-- route registration
-- audit redaction and storage
-- the Fastify and Express adapter packages
-- the `opengate init --template ...` starter flow
-
-## CLI Quick Start
-
-OpenGate now ships with a starter CLI:
-
-```bash
-npm run cli -- init --template website
-npm run cli -- init --route mixed
-npm run cli -- validate --file opengate.config.json
-npm run cli -- migrate --file opengate.config.json
-npm run cli -- control list organizations --file opengate.config.json
-npm run cli -- control simulate --file opengate.config.json --method GET --path /api
-```
-
-If the package is installed in another project, the published command is `opengate`:
-
-```bash
-opengate init --route mixed
-opengate validate --file opengate.config.json
-opengate migrate --file opengate.config.json
-opengate control list users --file opengate.config.json
-opengate control export --file opengate.config.json --out export.json
-```
-
-The `init` command generates:
-- `opengate.config.json`
-- `server.ts`
-- `README.md`
-- `DEMO-CREDENTIALS.md`
-- `data/audit-sample.json`
-
-The template flag is now the preferred path:
-- `website` for the browser login starter
-- `api` for the JWT-protected API starter
-- `partner` for the API-key starter
-
-## Example App
-
-The repository includes a separate example app in [examples/website](examples/website). It shows the full flow in a compact form: a fake username/password login, JWT stored in an `HttpOnly` cookie, a single `GET /api` endpoint, and the same base response shape for free-tier and upgraded-tier access. Rate limiting and audit logging run behind the scenes.
-
-The same example now also exposes a lightweight protected `/admin` page for inspecting config, simulating requests, and managing demo keys and policies.
-
-If you prefer the Express adapter, see [examples/express-website](examples/express-website). It mirrors the same story with the Express route registration helper and the same admin page.
-
-If you want the same mock website before OpenGate is installed, see [examples/mock-website](examples/mock-website). That folder is the plain baseline plus a step-by-step install guide.
-
-The generated docs site lives in [docs-site](docs-site) and is versioned alongside the packages. The built output goes to `docs-site/dist` when you run `npm run docs:build`.
-
-## Control Plane
-
-Phase 6 adds a lightweight control plane on top of the same runtime config and policy model.
-
-Use the library API when you want to manage config in-process:
-
-```ts
-import { createControlPlane, registerControlPlaneRoutes } from "opengate";
-
-const controlPlane = createControlPlane("./opengate.config.json");
-registerControlPlaneRoutes(app, gate, controlPlane);
-```
-
-The control plane covers:
-- listing and reading organizations, users, API keys, and route policies
-- issuing, rotating, disabling, and revoking API keys
-- exporting and importing JSON config
-- simulating requests against the current policy model before rollout
-- a lightweight protected `/admin` page in the example apps for the common workflows
-
-The matching CLI commands use the same JSON model:
-- `opengate control list organizations`
-- `opengate control get users user-1`
-- `opengate control issue api-key ...`
-- `opengate control simulate --method GET --path /api`
-
-Run it locally with:
-
-```bash
+```powershell
 npm install
-npm run test
-npm run dev
+npm run build
+
+$env:OPENGATE_DATABASE_URL = "./data/opengate.sqlite"
+$env:OPENGATE_KEY_PEPPER = "replace-with-a-random-secret-at-least-32-characters"
+$env:OPENGATE_SESSION_SECRET = "replace-with-a-different-random-secret-at-least-32-characters"
+$env:OPENGATE_PUBLIC_BASE_URL = "http://127.0.0.1:8080"
+
+node dist/src/v2/main.js migrate
+node dist/src/v2/main.js bootstrap-admin --email admin@example.com
+node dist/src/v2/main.js serve
 ```
 
-Then open [http://127.0.0.1:3000](http://127.0.0.1:3000).
+The bootstrap command securely prompts for a password; it intentionally refuses passwords passed on the command line. Open `http://127.0.0.1:8080/admin` to configure APIs, roles, consumers, assignments, and keys.
 
-## Notes
+For development, use `npm run v2:dev` after setting the same environment variables. Production deployments must use an HTTPS public URL and HTTPS upstream APIs. The initial SQLite runtime is for one gateway process; do not run multiple instances against it for shared quota enforcement.
 
-OpenGate still supports the MVP shared-secret JWT flow for demos and tightly controlled environments. For production, the recommended path is remote JWKS verification so OpenGate validates with rotating public keys instead of sharing the signing secret.
+See [v2 operations](docs/v2/OPERATIONS.md) for backups, key rotation, health checks, and production restrictions.
 
-The product is still intentionally narrow in a few places: Fastify-first integration with an Express adapter, in-memory rate limiting by default, SQLite audit logging by default, and Redis/Postgres as the explicit scale-out path.
+OpenGate will be a universal access gateway for existing HTTP APIs.
 
-Phase 1 security upgrades now included:
-- remote JWKS issuers with in-process caching
-- one-refresh retry on unknown `kid`
-- issuer disablement
-- versioned API-key rotation and revocation windows
-- validated audit-claim allowlists so only approved JWT claims are persisted
+You register an upstream API, define shared roles, register API consumers, and assign each consumer one role for each API. Consumers call OpenGate with an API key; OpenGate decides whether their role can use the requested path and method, enforces its limits, and forwards allowed traffic to the upstream API.
 
-Phase 4 scale-out options are now available when you need them:
-- set `rateLimits.store` to `redis` for multi-node rate limiting
-- set `audit.backend` to `postgres` for a durable audit store
-- tune `audit.flushIntervalMs`, `audit.batchSize`, and `audit.maxQueueSize` for higher-throughput deployments
-- keep the in-memory and SQLite defaults for local dev and single-node demos
+```text
+API consumer
+  -> OpenGate public gateway
+      -> verify API key
+      -> resolve consumer's role for this API
+      -> check method/path permission
+      -> check rate limit and usage quota
+      -> proxy allowed request to the upstream API
+```
 
-Phase 5 visibility is now available too:
-- call `gate.registerOperationalRoutes(app)` to expose `/healthz`, `/readyz`, `/metrics`, and `/status`
-- pass a logger adapter, such as `createConsoleLoggerAdapter()`, if you want structured JSON request logs
-- use the `x-request-id` header, or override it with `observability.requestIdHeader`, to correlate logs and audit rows
+OpenGate is deliberately independent of the upstream language or framework. The upstream may be a Node, Python, Go, Java, PHP, or third-party HTTP API.
 
-## Versioning
+## What OpenGate Is For
 
-OpenGate follows semantic versioning. Release versions are coordinated through semantic-release, and the release workflow tags releases on pushes to `main`.
+Use OpenGate when you need a straightforward, centrally managed way to control who may call existing APIs and how much access they have.
 
-In practice:
-- conventional commits define the release bump
-- the release workflow updates package versions and changelogs, then publishes a GitHub release
-- the current root package stays backward compatible while the adapter packages and docs move in lockstep
+It is not intended to be a feature-for-feature replacement for an enterprise API gateway such as Kong. OpenGate focuses on the access-management problem:
 
-## License
+- register multiple upstream APIs in one place;
+- create reusable roles;
+- grant a registered consumer one role for a particular API;
+- issue a consumer API key;
+- allow or deny requests by method and path;
+- enforce both burst rate limits and longer-period usage quotas;
+- audit gateway decisions.
 
-MIT
+## Core Model
+
+### APIs
+
+An API is an upstream HTTP service OpenGate proxies to. An administrator registers it with a name, URL, and public gateway slug.
+
+```text
+Name: Weather API
+Upstream URL: https://weather.internal.example/v1
+Gateway URL: https://gateway.example/apis/weather/*
+```
+
+OpenGate forwards the remaining path and request details to the configured upstream only after access checks pass.
+
+The v2 default is OpenGate-hosted gateway paths such as `/apis/weather/*`. Custom domains are intentionally deferred until after the core gateway is stable.
+
+### Roles
+
+Roles are shared across OpenGate. They define the access a consumer receives, regardless of which API they are assigned to.
+
+A role contains:
+
+- permitted HTTP method/path rules, such as `GET /reports/*`;
+- an optional burst rate limit, such as `10 requests/minute`;
+- an optional usage quota, such as `1,000 requests/day`.
+
+Both limits can be active. The first exhausted limit blocks the request.
+
+```text
+Role: analyst
+
+Permissions
+  - GET /reports/*
+  - GET /exports/*
+
+Limits
+  - 30 requests/minute
+  - 5,000 requests/month
+```
+
+Roles are not sent by a consumer in a request. A consumer could forge a `role` header. OpenGate derives the role from its own assignment records after verifying the consumer's API key.
+
+### Consumers and API Keys
+
+A consumer is a person, application, or partner service that has been registered by an administrator.
+
+For each API, a consumer has exactly one role. This prevents ambiguous permissions and competing limits.
+
+```text
+Ava
+  - Weather API: analyst
+  - Billing API: viewer
+```
+
+OpenGate issues a high-entropy API key for the consumer. The raw key is shown once at creation time and is never stored. OpenGate stores only a secure hash of it.
+
+The consumer supplies the key with each request:
+
+```http
+X-OpenGate-Key: og_live_...
+```
+
+The header name will be configurable, with `X-OpenGate-Key` as the default.
+
+### Quota Scope
+
+Usage is counted separately for every consumer/API assignment.
+
+```text
+Ava + Weather API: 5,000 requests/month
+Ava + Billing API: 5,000 separate requests/month
+```
+
+Traffic to one API never consumes the consumer's quota for another API.
+
+## Request Decision Flow
+
+For a request such as `GET /apis/weather/reports/today`:
+
+1. OpenGate resolves `weather` to the registered API.
+2. It verifies the supplied API key.
+3. It finds the consumer's single role assignment for the Weather API.
+4. It checks that the role allows `GET /reports/today`.
+5. It checks the role's active rate limit and usage quota for this consumer/API pair.
+6. If either limit is exhausted, OpenGate rejects the request with `429 Too Many Requests`.
+7. If the method/path is not permitted, OpenGate rejects it with `403 Forbidden`.
+8. If the key is missing, invalid, revoked, or lacks an assignment, OpenGate rejects it with `401 Unauthorized` or `403 Forbidden`, as appropriate.
+9. Otherwise, OpenGate proxies the request to the registered upstream and records the outcome.
+
+## Administrator Setup Flow
+
+OpenGate provides a setup page for administration. The first release uses a bootstrap administrator account and normal username/password login with secure sessions. SSO is a later extension.
+
+An administrator operates OpenGate in this order:
+
+1. Create a role and define its permitted paths/methods and limits.
+2. Register an upstream API and choose its gateway slug.
+3. Register a consumer.
+4. Assign that consumer exactly one shared role for the API.
+5. Issue the consumer's API key and deliver it securely.
+6. Give the consumer the gateway URL and required key header.
+7. Review request/audit records and rotate or revoke keys when needed.
+
+## Initial Product Decisions
+
+These are confirmed design decisions for the redesign:
+
+| Area | Decision |
+| --- | --- |
+| Product shape | Standalone universal HTTP gateway; not an in-app Node library |
+| Upstreams | Multiple registered HTTP APIs, independent of implementation language |
+| Public routing | Gateway-managed paths: `/apis/:apiSlug/*` |
+| Custom domains | Deferred from the initial release |
+| Admin access | Bootstrap admin, username/password login, secure sessions |
+| Roles | One shared role catalog across OpenGate |
+| Assignment | Exactly one role per consumer, per API |
+| Identity | OpenGate-issued API keys sent in a configurable request header |
+| Key storage | Raw key shown once; only a secure hash is stored |
+| Authorization | Role rules define permitted HTTP methods and path patterns |
+| Limits | Optional rate limit and optional usage quota; either may block first |
+| Usage scope | Separate counter per consumer/API assignment |
+| Proxy behavior | Only allowed requests are forwarded to the configured upstream |
+
+## What Is Deliberately Deferred
+
+To keep the first universal version understandable and operable, the following are not part of its initial core:
+
+- custom API domains;
+- browser end-user login/JWT flows;
+- billing, subscription, or product-plan management;
+- multiple concurrent roles for one consumer/API assignment;
+- SSO for setup administrators;
+- advanced enterprise traffic management, service discovery, and multi-region control planes.
+
+## Current Repository
+
+The existing codebase is the previous implementation: a Node/TypeScript library with Fastify and Express adapters, JWT/API-key handling, rate limits, audits, a CLI, and example applications. It is useful reference material, but it is not the v2 architecture described above.
+
+The next implementation phase should replace the Node route-wrapper model with a standalone reverse-proxy gateway and administration service built around the core model in this README.
